@@ -8,7 +8,10 @@ from __future__ import annotations
 import heapq
 from dataclasses import dataclass, field
 from typing import Optional
-from models import Pos, GridCell
+try:
+    from .models import Pos, GridCell
+except (ImportError, ValueError):
+    from models import Pos, GridCell
 
 CONGESTION_WEIGHT = 5.0
 

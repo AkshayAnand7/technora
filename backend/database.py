@@ -10,7 +10,8 @@ import json
 import os
 import time
 
-DB_PATH = os.environ.get("MF_DB_PATH", "marketfloor.db")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.environ.get("MF_DB_PATH", os.path.join(BASE_DIR, "marketfloor.db"))
 
 
 def _conn() -> sqlite3.Connection:

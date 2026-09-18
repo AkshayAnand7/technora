@@ -10,13 +10,22 @@ import random
 import time
 from typing import Optional
 
-from models import (
-    AGV, AGVStatus, Task, TaskStatus, TaskPriority, Auction,
-    Pos, GridCell, CellType, StationInfo, CorridorInfo,
-    DispatchMode, Metrics, SimEvent,
-)
-from astar import find_path
-from auction import run_auction, explain_winner, get_future_impact_details
+try:
+    from .models import (
+        AGV, AGVStatus, Task, TaskStatus, TaskPriority, Auction,
+        Pos, GridCell, CellType, StationInfo, CorridorInfo,
+        DispatchMode, Metrics, SimEvent,
+    )
+    from .astar import find_path
+    from .auction import run_auction, explain_winner, get_future_impact_details
+except (ImportError, ValueError):
+    from models import (
+        AGV, AGVStatus, Task, TaskStatus, TaskPriority, Auction,
+        Pos, GridCell, CellType, StationInfo, CorridorInfo,
+        DispatchMode, Metrics, SimEvent,
+    )
+    from astar import find_path
+    from auction import run_auction, explain_winner, get_future_impact_details
 
 # ---- Grid / Factory layout ----
 GRID_W, GRID_H = 40, 30
@@ -150,6 +159,7 @@ class Simulation:
         self.speed = 1.0
         self.running = True
         self.paused = False
+        self.emergency_stop_active = False
         self.tick_count = 0
         self._task_counter = 111
         self._event_counter = 0
@@ -821,10 +831,16 @@ class Simulation:
                     self.agvs, self.grid, len(self.task_queue))
         return auction
 
-    def assign_task(self, task: Task, agv_id: str):
+    def assign_task(self, task: Task, agv_id: str) -> bool:
+        if self.emergency_stop_active:
+            return False
+        if not task or task.status in (TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS, TaskStatus.DELIVERING, TaskStatus.COMPLETED, TaskStatus.FAILED):
+            return False
         agv = next((a for a in self.agvs if a.id == agv_id), None)
         if not agv:
-            return
+            return False
+        if agv.status in (AGVStatus.FAILED, AGVStatus.CHARGING, AGVStatus.MOVING, AGVStatus.DELIVERING):
+            return False
         pr = find_path(self.grid, agv.position, task.source_position)
         if pr.found:
             agv.route = pr.path
@@ -841,6 +857,8 @@ class Simulation:
                 self.task_queue.remove(task)
             self._push_event(agv.id, f"Route assigned to {task.source}",
                              f"Path: {pr.distance} cells", category="agv", agv_id=agv.id, task_id=task.id)
+            return True
+        return False
 
     def spawn_task(self, source: str | None = None, dest: str | None = None, priority: str | None = None) -> Task:
         task = self.create_task(source, dest, priority)
@@ -900,22 +918,26 @@ class Simulation:
                              "Battery low", category="agv", agv_id=target.id)
 
     def emergency_stop(self):
+        self.emergency_stop_active = True
         self.paused = True
+        self.running = False
         for a in self.agvs:
             a.speed = 0.0
-        self._push_event("SYSTEM", "EMERGENCY STOP (ALL)", "All AGVs and machines halted", category="machine")
+        self._push_event("SYSTEM", "EMERGENCY STOP (ALL) Engaged", "All AGVs and factory operations halted", category="machine")
 
     def resume(self):
+        self.emergency_stop_active = False
         self.paused = False
+        self.running = True
         for a in self.agvs:
-            if a.status == AGVStatus.MOVING:
+            if a.status in (AGVStatus.MOVING, AGVStatus.DELIVERING):
                 a.speed = 1.2
         self._push_event("SYSTEM", "System resumed", "Operations normal", category="system")
 
     # ---- Tick Loop ---- #
 
     def _process_queue(self):
-        if not self.task_queue:
+        if not self.task_queue or self.emergency_stop_active:
             return
         available = [a for a in self.agvs if a.status in (AGVStatus.IDLE, AGVStatus.WAITING)]
         if not available:
@@ -930,7 +952,7 @@ class Simulation:
                 self.assign_task(task, auction.winner_id)
 
     def tick(self):
-        if not self.running or self.paused:
+        if self.emergency_stop_active or not self.running or self.paused:
             return
         self.tick_count += 1
 
@@ -1172,6 +1194,7 @@ class Simulation:
             "speed": self.speed,
             "running": self.running,
             "paused": self.paused,
+            "emergencyStopActive": self.emergency_stop_active,
             "tickCount": self.tick_count,
         }
 

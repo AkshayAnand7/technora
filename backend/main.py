@@ -15,9 +15,14 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from simulation import Simulation
-from database import init_db, save_auction, save_completed_task, get_analytics
-from models import DispatchMode
+try:
+    from .simulation import Simulation
+    from .database import init_db, save_auction, save_completed_task, get_analytics
+    from .models import DispatchMode, AGVStatus, TaskPriority, TaskStatus
+except (ImportError, ValueError):
+    from simulation import Simulation
+    from database import init_db, save_auction, save_completed_task, get_analytics
+    from models import DispatchMode, AGVStatus, TaskPriority, TaskStatus
 
 # ---- Globals ---- #
 sim = Simulation()
@@ -44,6 +49,47 @@ saved_task_ids: set[str] = set()
 saved_auction_ids: set[str] = set()
 
 last_broadcast_event_id = 0
+
+
+# ---- Broadcast Helper ---- #
+
+async def broadcast_state(force_reset: bool = False):
+    global last_broadcast_event_id
+    if not clients:
+        return
+    snapshot = sim.snapshot()
+    state_msg = json.dumps(snapshot)
+    dead: list[WebSocket] = []
+    for ws in list(clients):
+        try:
+            if force_reset:
+                await ws.send_text(json.dumps({
+                    "type": "RESET",
+                    "state": snapshot,
+                    "events": [e.to_dict() for e in sim.events[-30:]]
+                }))
+            else:
+                await ws.send_text(state_msg)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        if ws in clients:
+            clients.remove(ws)
+
+    if not force_reset and sim.events and clients:
+        new_events = [e for e in sim.events if e.id > last_broadcast_event_id]
+        if new_events:
+            last_broadcast_event_id = new_events[-1].id
+            ev_msg = json.dumps({
+                "type": "EVENTS",
+                "events": [e.to_dict() for e in new_events],
+            })
+            for ws in list(clients):
+                try:
+                    await ws.send_text(ev_msg)
+                except Exception:
+                    pass
+
 
 # ---- Tick Loop ---- #
 
@@ -74,32 +120,8 @@ async def tick_loop():
                     except Exception:
                         pass
 
-            # Broadcast state to all WebSocket clients
-            if clients:
-                state_msg = json.dumps(sim.snapshot())
-                dead: list[WebSocket] = []
-                for ws in clients:
-                    try:
-                        await ws.send_text(state_msg)
-                    except Exception:
-                        dead.append(ws)
-                for ws in dead:
-                    clients.remove(ws)
-
-            # Broadcast ONLY genuinely new events (prevent repeated spam/flicker)
-            if clients and sim.events:
-                new_events = [e for e in sim.events if e.id > last_broadcast_event_id]
-                if new_events:
-                    last_broadcast_event_id = new_events[-1].id
-                    ev_msg = json.dumps({
-                        "type": "EVENTS",
-                        "events": [e.to_dict() for e in new_events],
-                    })
-                    for ws in clients:
-                        try:
-                            await ws.send_text(ev_msg)
-                        except Exception:
-                            pass
+            # Broadcast state to all connected clients
+            await broadcast_state()
 
             interval = max(0.05, 0.15 / sim.speed)
             await asyncio.sleep(interval)
@@ -126,69 +148,187 @@ async def ws_factory(websocket: WebSocket):
             }))
     except Exception:
         pass
+
     try:
         while True:
-            # Listen for client messages (commands)
             data = await websocket.receive_text()
-            msg = json.loads(data)
+            try:
+                msg = json.loads(data)
+            except Exception:
+                await websocket.send_json({"type": "ERROR", "success": False, "error": "Invalid JSON format"})
+                continue
+
             cmd = msg.get("command")
-            if cmd == "domain_action":
+            if not cmd:
+                await websocket.send_json({"type": "ERROR", "success": False, "error": "Missing 'command' attribute"})
+                continue
+
+            cmd_lower = str(cmd).lower().strip()
+
+            if cmd_lower in ("domain_action", "domainaction"):
                 sim.handle_domain_action(msg.get("domain", ""), msg.get("action", ""))
-            elif cmd == "run_scenario":
-                sim.run_demo_scenario(msg.get("scenarioId", ""))
-            elif cmd == "spawn_task":
-                sim.spawn_task(msg.get("source"), msg.get("dest"))
-            elif cmd == "inject_machine":
-                sim.inject_machine_event(msg.get("subtype", "Temperature high"))
-            elif cmd == "inject_material":
-                sim.inject_material_event(msg.get("subtype", "Low stock at S1"))
-            elif cmd == "inject_agv":
-                sim.inject_agv_event(msg.get("subtype", "Route updated"))
-            elif cmd == "inject_production":
-                sim.inject_production_event(msg.get("subtype", "Order priority increased"))
-            elif cmd == "inject_factory":
-                sim.inject_factory_event(msg.get("subtype", "Power stable"))
-            elif cmd == "inject_human":
-                sim.inject_human_event(msg.get("subtype", "Worker 2 logged in"))
-            elif cmd == "assign_now":
-                tid = msg.get("taskId", "TASK-108")
-                target_task = next((t for t in sim.tasks if t.id == tid), None)
-                if not target_task and sim.tasks: target_task = sim.tasks[0]
-                if target_task:
+                await broadcast_state()
+
+            elif cmd_lower in ("run_scenario", "scenario", "demoscenario", "run_demo_scenario"):
+                sim.run_demo_scenario(msg.get("scenarioId", msg.get("scenario", "")))
+                await broadcast_state()
+
+            elif cmd_lower in ("spawn_task", "spawn"):
+                sim.spawn_task(msg.get("source"), msg.get("dest"), msg.get("priority"))
+                await broadcast_state()
+
+            elif cmd_lower in ("assign_now", "assign"):
+                if sim.emergency_stop_active:
+                    await websocket.send_json({"type": "ERROR", "success": False, "error": "Emergency Stop is active. Cannot assign tasks."})
+                    continue
+
+                tid = msg.get("taskId")
+                target_task = None
+                if tid:
+                    target_task = next((t for t in sim.tasks if t.id == tid), None)
+                if not target_task:
+                    target_task = next((t for t in sim.tasks if t.status in (TaskStatus.PENDING, TaskStatus.AUCTIONING)), None)
+                if not target_task and sim.tasks:
+                    target_task = sim.tasks[0]
+
+                if not target_task:
+                    await websocket.send_json({"type": "ERROR", "success": False, "error": "No available task to assign."})
+                    continue
+
+                if target_task.status in (TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS, TaskStatus.DELIVERING, TaskStatus.COMPLETED):
+                    await websocket.send_json({"type": "ERROR", "success": False, "error": f"Task {target_task.id} is already {target_task.status.value}."})
+                    continue
+
+                agv_id = msg.get("agvId")
+                if agv_id:
+                    target_agv = next((a for a in sim.agvs if a.id == agv_id), None)
+                    if not target_agv:
+                        await websocket.send_json({"type": "ERROR", "success": False, "error": f"AGV {agv_id} not found."})
+                        continue
+                    if target_agv.status == AGVStatus.FAILED:
+                        await websocket.send_json({"type": "ERROR", "success": False, "error": f"AGV {agv_id} is failed and cannot take tasks."})
+                        continue
+                    if target_agv.status == AGVStatus.CHARGING:
+                        await websocket.send_json({"type": "ERROR", "success": False, "error": f"AGV {agv_id} is charging and cannot take tasks."})
+                        continue
+                    if target_agv.status in (AGVStatus.MOVING, AGVStatus.DELIVERING):
+                        await websocket.send_json({"type": "ERROR", "success": False, "error": f"AGV {agv_id} is already busy."})
+                        continue
+                    assigned = sim.assign_task(target_task, agv_id)
+                    if not assigned:
+                        await websocket.send_json({"type": "ERROR", "success": False, "error": f"Could not route AGV {agv_id} to task {target_task.id}."})
+                        continue
+                else:
                     avail = [a for a in sim.agvs if a.status in (AGVStatus.IDLE, AGVStatus.WAITING)]
                     if avail:
                         sim.assign_task(target_task, avail[0].id)
                     else:
                         sim.run_auction_for(target_task)
-            elif cmd == "fail_agv":
+
+                await broadcast_state()
+                await websocket.send_json({"type": "SUCCESS", "success": True, "command": "assign", "taskId": target_task.id})
+
+            elif cmd_lower in ("fail_agv", "fail"):
                 sim.fail_agv(msg.get("agvId"))
-            elif cmd == "block_corridor":
+                await broadcast_state()
+
+            elif cmd_lower in ("block_corridor", "block"):
                 sim.block_corridor()
-            elif cmd == "force_charge":
+                await broadcast_state()
+
+            elif cmd_lower in ("force_charge", "charge"):
                 sim.force_charge(msg.get("agvId"))
-            elif cmd == "estop":
+                await broadcast_state()
+
+            elif cmd_lower in ("estop", "emergency_stop", "stop"):
                 sim.emergency_stop()
-            elif cmd == "resume":
+                await broadcast_state()
+                await websocket.send_json({"type": "SUCCESS", "success": True, "emergencyStopActive": True})
+
+            elif cmd_lower == "resume":
                 sim.resume()
-            elif cmd == "start":
+                await broadcast_state()
+                await websocket.send_json({"type": "SUCCESS", "success": True, "emergencyStopActive": False})
+
+            elif cmd_lower == "start":
+                if sim.emergency_stop_active:
+                    await websocket.send_json({"type": "ERROR", "success": False, "error": "Emergency Stop is active. Issue 'resume' to resume operations."})
+                    continue
                 sim.running = True
                 sim.paused = False
-            elif cmd == "pause":
+                await broadcast_state()
+
+            elif cmd_lower == "pause":
+                if sim.emergency_stop_active:
+                    await websocket.send_json({"type": "ERROR", "success": False, "error": "Emergency Stop is active. Cannot toggle pause."})
+                    continue
                 sim.paused = not sim.paused
-            elif cmd == "reset":
+                await broadcast_state()
+
+            elif cmd_lower == "reset":
                 saved_task_ids.clear()
                 saved_auction_ids.clear()
                 sim.reset()
                 last_broadcast_event_id = 0
-            elif cmd == "set_speed":
-                sim.speed = float(msg.get("speed", 1))
-            elif cmd == "set_mode":
-                mode = msg.get("mode", "MARKETFLOOR")
-                sim.mode = DispatchMode(mode)
+                await broadcast_state(force_reset=True)
+                await websocket.send_json({"type": "SUCCESS", "success": True, "command": "reset"})
+
+            elif cmd_lower == "set_speed":
+                try:
+                    val = float(msg.get("speed", 1.0))
+                    if val <= 0 or val != val:
+                        sim.speed = 1.0
+                    else:
+                        sim.speed = max(0.1, min(5.0, val))
+                except (ValueError, TypeError):
+                    sim.speed = 1.0
+                await broadcast_state()
+                await websocket.send_json({"type": "SUCCESS", "success": True, "speed": sim.speed})
+
+            elif cmd_lower in ("set_mode", "set_dispatch_mode"):
+                raw_mode = str(msg.get("mode", "")).strip().upper()
+                if raw_mode == "AUCTION":
+                    raw_mode = "MARKETFLOOR"
+                valid_modes = {m.value: m for m in DispatchMode}
+                if raw_mode in valid_modes:
+                    sim.mode = valid_modes[raw_mode]
+                    sim._push_event("SYSTEM", f"Dispatch mode set to {sim.mode.value}", category="system")
+                    await broadcast_state()
+                    await websocket.send_json({"type": "SUCCESS", "success": True, "mode": sim.mode.value})
+                else:
+                    await websocket.send_json({
+                        "type": "ERROR",
+                        "success": False,
+                        "error": f"Invalid dispatch mode '{msg.get('mode')}'. Valid options: {list(valid_modes.keys())}"
+                    })
+
+            elif cmd_lower in ("inject_machine", "inject_material", "inject_agv", "inject_production", "inject_factory", "inject_human"):
+                subtype = msg.get("subtype", "")
+                if cmd_lower == "inject_machine":
+                    sim.inject_machine_event(subtype or "Temperature high")
+                elif cmd_lower == "inject_material":
+                    sim.inject_material_event(subtype or "Low stock at S1")
+                elif cmd_lower == "inject_agv":
+                    sim.inject_agv_event(subtype or "Route updated")
+                elif cmd_lower == "inject_production":
+                    sim.inject_production_event(subtype or "Order priority increased")
+                elif cmd_lower == "inject_factory":
+                    sim.inject_factory_event(subtype or "Power stable")
+                elif cmd_lower == "inject_human":
+                    sim.inject_human_event(subtype or "Worker 2 logged in")
+                await broadcast_state()
+
+            else:
+                await websocket.send_json({
+                    "type": "ERROR",
+                    "success": False,
+                    "error": f"Unrecognized command: '{cmd}'"
+                })
+
     except WebSocketDisconnect:
         pass
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[ws_factory error] {e}")
     finally:
         if websocket in clients:
             clients.remove(websocket)

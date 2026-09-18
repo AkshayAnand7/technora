@@ -34,6 +34,14 @@ function connect() {
       if (msg.type === "STATE") {
         state = msg;
         onStateUpdate(state);
+      } else if (msg.type === "RESET") {
+        state = msg.state;
+        onStateUpdate(state);
+        allEvents = (msg.events || []).slice();
+        window.allEvents = allEvents;
+        window.inspectedEntity = null;
+        const evEl = document.getElementById("event-list");
+        if (evEl) renderEvents(evEl, allEvents);
       } else if (msg.type === "EVENTS") {
         let added = false;
         for (const e of msg.events) {
@@ -51,6 +59,8 @@ function connect() {
           const evEl = document.getElementById("event-list");
           renderEvents(evEl, allEvents);
         }
+      } else if (msg.type === "ERROR") {
+        console.warn("[SmartFactory WS] Server notice:", msg.error);
       }
     } catch (err) {
       console.warn("[SmartFactory WS] parse error", err);
@@ -239,7 +249,19 @@ function onStateUpdate(s) {
   // Pause button text
   const pauseBtn = document.getElementById("btn-pause-sim");
   if (pauseBtn) {
-    pauseBtn.textContent = s.paused ? "▶ Resume" : "⏸ Pause";
+    pauseBtn.textContent = (s.emergencyStopActive || s.paused) ? "▶ Resume" : "⏸ Pause";
+  }
+
+  // Emergency Stop button style
+  const estopBtn = document.getElementById("btn-estop-main");
+  if (estopBtn) {
+    if (s.emergencyStopActive) {
+      estopBtn.style.background = "#991b1b";
+      estopBtn.textContent = "⚠ E-STOP ACTIVE (RESUME)";
+    } else {
+      estopBtn.style.background = "#dc2626";
+      estopBtn.textContent = "🚨 Emergency Stop (All)";
+    }
   }
 }
 
@@ -252,21 +274,19 @@ function setupControls() {
 
   // Emergency Stop (All)
   on("btn-estop-main", () => {
-    if (state && state.paused) {
+    if (state && (state.emergencyStopActive || state.paused)) {
       send({ command: "resume" });
-      const estopBtn = document.getElementById("btn-estop-main");
-      if (estopBtn) estopBtn.style.background = "#dc2626";
     } else {
       send({ command: "estop" });
-      const estopBtn = document.getElementById("btn-estop-main");
-      if (estopBtn) estopBtn.style.background = "#991b1b";
     }
   });
 
   // Pause / Resume simulation button
   on("btn-pause-sim", () => {
-    if (state && state.paused) {
+    if (state && state.emergencyStopActive) {
       send({ command: "resume" });
+    } else if (state && state.paused) {
+      send({ command: "start" });
     } else {
       send({ command: "pause" });
     }

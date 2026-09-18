@@ -4,8 +4,12 @@
 # Bid calculation for NEAREST (baseline) and MARKETFLOOR modes.
 
 from __future__ import annotations
-from models import AGV, AGVStatus, Bid, Auction, Pos, GridCell, DispatchMode
-from astar import find_path
+try:
+    from .models import AGV, AGVStatus, Bid, Auction, Pos, GridCell, DispatchMode
+    from .astar import find_path
+except (ImportError, ValueError):
+    from models import AGV, AGVStatus, Bid, Auction, Pos, GridCell, DispatchMode
+    from astar import find_path
 import time
 
 _auction_counter = 0
