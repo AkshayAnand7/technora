@@ -115,12 +115,12 @@ def build_agvs() -> list[AGV]:
     # 7 AGVs matching the exact SmartFactory specification
     configs = [
         {"id": "AGV-01", "pos": Pos(14, 6), "color": "#0284c7", "battery": 78.0, "speed": 1.2, "status": AGVStatus.MOVING, "loc": "Machine B", "task": "TASK-108"},
-        {"id": "AGV-02", "pos": Pos(7, 15), "color": "#16a34a", "battery": 45.0, "speed": 1.0, "status": AGVStatus.MOVING, "loc": "Storage S1", "task": "TASK-107"},
-        {"id": "AGV-03", "pos": Pos(22, 6), "color": "#e06b3a", "battery": 92.0, "speed": 1.1, "status": AGVStatus.MOVING, "loc": "Machine A", "task": "TASK-105"},
+        {"id": "AGV-02", "pos": Pos(7, 15), "color": "#0284c7", "battery": 45.0, "speed": 1.0, "status": AGVStatus.MOVING, "loc": "Storage S1", "task": "TASK-107"},
+        {"id": "AGV-03", "pos": Pos(22, 6), "color": "#0284c7", "battery": 92.0, "speed": 1.1, "status": AGVStatus.MOVING, "loc": "Machine A", "task": "TASK-105"},
         {"id": "AGV-04", "pos": Pos(11, 23), "color": "#0284c7", "battery": 22.0, "speed": 0.0, "status": AGVStatus.IDLE, "loc": "Charging C1", "task": None},
-        {"id": "AGV-05", "pos": Pos(11, 25), "color": "#e06b3a", "battery": 88.0, "speed": 0.0, "status": AGVStatus.CHARGING, "loc": "Charging C1", "task": None},
+        {"id": "AGV-05", "pos": Pos(11, 25), "color": "#0284c7", "battery": 88.0, "speed": 0.0, "status": AGVStatus.CHARGING, "loc": "Charging C1", "task": None},
         {"id": "AGV-06", "pos": Pos(33, 15), "color": "#0284c7", "battery": 70.0, "speed": 1.3, "status": AGVStatus.MOVING, "loc": "Storage S2", "task": "TASK-106"},
-        {"id": "AGV-07", "pos": Pos(33, 25), "color": "#16a34a", "battery": 86.0, "speed": 1.2, "status": AGVStatus.MOVING, "loc": "Dispatch D1", "task": "TASK-109"},
+        {"id": "AGV-07", "pos": Pos(33, 25), "color": "#0284c7", "battery": 86.0, "speed": 1.2, "status": AGVStatus.MOVING, "loc": "Dispatch D1", "task": "TASK-109"},
     ]
     agvs = []
     for c in configs:
@@ -163,6 +163,7 @@ class Simulation:
         self.tick_count = 0
         self._task_counter = 111
         self._event_counter = 0
+        self.selected_task_id = "TASK-108"
 
         # SmartFactory specific states
         self.machine_c_alert: bool = True
@@ -281,9 +282,20 @@ class Simulation:
             self.events = self.events[-200:]
 
     def _station_by_name(self, name: str) -> StationInfo | None:
+        if not name:
+            return None
+        low = name.lower()
         for s in STATIONS:
-            if s.name.lower() == name.lower() or s.id.lower() == name.lower():
+            if s.name.lower() == low or s.id.lower() == low:
                 return s
+        if "pack" in low or "dispatch" in low:
+            return next((s for s in STATIONS if s.id == "dispatch-d1"), None)
+        if "raw" in low:
+            return next((s for s in STATIONS if s.id == "raw-material"), None)
+        if "storage" in low or "s1" in low:
+            return next((s for s in STATIONS if s.id == "storage-s1"), None)
+        if "s2" in low:
+            return next((s for s in STATIONS if s.id == "storage-s2"), None)
         return None
 
     def set_decision_trace(self, stage: str, step_index: int, title: str, desc: str, steps: list[dict] | None = None):
@@ -863,6 +875,90 @@ class Simulation:
             return True
         return False
 
+    def assign_selected_task(self, task_id: str | None = None) -> tuple[bool, str, str]:
+        """
+        Guaranteed direct operator task assignment:
+        Finds the requested task (or creates/reactivates it), selects the best AGV,
+        sets its status to MOVING (turning its color ORANGE), routes it to pickup,
+        and ensures it delivers and completes the task.
+        """
+        # Ensure simulation is running
+        self.running = True
+        self.paused = False
+
+        target_task = None
+        if task_id:
+            target_task = next((t for t in self.tasks if t.id == task_id), None)
+
+        if not target_task:
+            target_task = next((t for t in self.task_queue if t.status in (TaskStatus.PENDING, TaskStatus.AUCTIONING)), None)
+
+        if not target_task:
+            target_task = self.create_task(source="Storage S2", dest="Dispatch D1", priority="HIGH")
+
+        # If already completed or failed, reactivate it so the AGV can complete it
+        if target_task.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
+            target_task.status = TaskStatus.AUCTIONING
+            target_task.completed_at = None
+            target_task.started_at = None
+            if target_task in self.completed_tasks:
+                self.completed_tasks.remove(target_task)
+
+        # Select best AGV to grab this task
+        # 1. Idle or waiting AGVs with sufficient battery
+        candidates = [a for a in self.agvs if a.status in (AGVStatus.IDLE, AGVStatus.WAITING) and a.battery > 15.0]
+        # 2. If none idle, any active non-failed/non-charging AGV
+        if not candidates:
+            candidates = [a for a in self.agvs if a.status not in (AGVStatus.FAILED, AGVStatus.CHARGING)]
+        # 3. If all charging or failed, recover AGV-01
+        if not candidates:
+            agv_first = self.agvs[0]
+            agv_first.status = AGVStatus.IDLE
+            agv_first.battery = 85.0
+            candidates = [agv_first]
+
+        chosen_agv = min(candidates, key=lambda a: a.position.manhattan(target_task.source_position))
+
+        # Route chosen AGV to pickup
+        pr = find_path(self.grid, chosen_agv.position, target_task.source_position)
+        if not pr.found or not pr.path:
+            pr = find_path(self.grid, chosen_agv.position, target_task.source_position, blocked=set())
+
+        chosen_agv.current_task = target_task.id
+        chosen_agv.destination = Pos(target_task.source_position.x, target_task.source_position.y)
+        chosen_agv.route = pr.path if (pr and pr.path) else [target_task.source_position]
+        chosen_agv.route_index = 0
+        chosen_agv.status = AGVStatus.MOVING
+        chosen_agv.speed = 1.3
+        chosen_agv.location = f"Heading to {target_task.source}"
+
+        target_task.status = TaskStatus.ASSIGNED
+        target_task.assigned_agv = chosen_agv.id
+        target_task.started_at = time.time()
+        if target_task in self.task_queue:
+            self.task_queue.remove(target_task)
+
+        self.selected_task_id = target_task.id
+
+        # Update Autonomous Decision Trace to ACT
+        self.set_decision_trace(
+            stage="ACT",
+            step_index=4,
+            title=f"ACT: {chosen_agv.id} Dispatched to {target_task.source}",
+            desc=f"Operator task assignment confirmed. {chosen_agv.id} en route to pick up {target_task.material} ({target_task.source} → {target_task.destination})."
+        )
+
+        self._push_event(
+            chosen_agv.id,
+            f"Assigned to {target_task.id}",
+            f"Pickup: {target_task.source} → Drop: {target_task.destination}",
+            category="production",
+            agv_id=chosen_agv.id,
+            task_id=target_task.id
+        )
+
+        return True, chosen_agv.id, target_task.id
+
     def spawn_task(self, source: str | None = None, dest: str | None = None, priority: str | None = None) -> Task:
         task = self.create_task(source, dest, priority)
         auction = self.run_auction_for(task)
@@ -1158,7 +1254,11 @@ class Simulation:
             open_tasks.append(new_t.to_dict())
 
         # Selected task details
-        selected_task = next((t for t in self.tasks if t.id == "TASK-108"), None)
+        selected_task = None
+        if hasattr(self, "selected_task_id") and self.selected_task_id:
+            selected_task = next((t for t in self.tasks if t.id == self.selected_task_id), None)
+        if not selected_task:
+            selected_task = next((t for t in self.tasks if t.id == "TASK-108"), None)
         if not selected_task and self.tasks:
             selected_task = self.tasks[0]
 

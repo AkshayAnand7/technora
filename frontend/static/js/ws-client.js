@@ -134,12 +134,28 @@ window.filterEvents = function(category) {
   }
 };
 
+window.selectedManualTask = null;
+
 window.selectTask = function(taskId) {
   if (!state || !state.tasks) return;
   const t = state.tasks.find(x => x.id === taskId);
   if (t) {
+    window.selectedManualTask = t;
     renderSelectedTask(t);
   }
+};
+
+window.assignTaskDirect = function(taskId) {
+  window.selectTask(taskId);
+  const btn = document.getElementById("btn-assign-now");
+  if (btn) {
+    btn.innerHTML = '<span>⚡</span> Dispatching AGV...';
+    setTimeout(() => {
+      btn.innerHTML = '<span>✓</span> AGV Grabbed Task!';
+      setTimeout(() => { btn.innerHTML = '<span>↗</span> Assign Task'; }, 1600);
+    }, 300);
+  }
+  send({ command: "assign_now", taskId });
 };
 
 // ---- State Update Handler ---- //
@@ -175,7 +191,10 @@ function onStateUpdate(s) {
   }
 
   // Render selected task details
-  if (s.selectedTask && !window.inspectedEntity) {
+  if (window.selectedManualTask) {
+    const fresh = (s.tasks || []).find(x => x.id === window.selectedManualTask.id);
+    renderSelectedTask(fresh || window.selectedManualTask);
+  } else if (s.selectedTask && !window.inspectedEntity) {
     renderSelectedTask(s.selectedTask);
   }
 
@@ -358,10 +377,24 @@ function setupControls() {
     window.allEvents = [];
   });
 
-  // Assign Now button
+  // Assign Task button
   on("btn-assign-now", () => {
+    const btn = document.getElementById("btn-assign-now");
     const idEl = document.getElementById("st-id");
-    const taskId = idEl ? idEl.textContent : "TASK-108";
+    const taskId = idEl ? idEl.textContent.trim() : "TASK-108";
+
+    if (btn) {
+      btn.style.transform = "scale(0.97)";
+      btn.innerHTML = '<span>⚡</span> Dispatching AGV...';
+      setTimeout(() => {
+        btn.style.transform = "none";
+        btn.innerHTML = '<span>✓</span> AGV Grabbed Task!';
+        setTimeout(() => {
+          btn.innerHTML = '<span>↗</span> Assign Task';
+        }, 1600);
+      }, 300);
+    }
+
     send({ command: "assign_now", taskId });
   });
 

@@ -240,6 +240,23 @@ function drawStations(ctx, state) {
   }
 }
 
+// Dynamic AGV state color mapping:
+// Always in Blue by default/idle.
+// Whenever it performs task -> Orange.
+// If charging -> Green.
+// If failed -> Red.
+function getAGVColor(agv) {
+  if (!agv) return "#0284c7";
+  if (agv.status === "FAILED") return "#dc2626";
+  if (agv.status === "CHARGING" || (agv.location && agv.location.toLowerCase().includes("charging") && !agv.currentTask)) {
+    return "#16a34a"; // Green when charging
+  }
+  if (agv.currentTask || agv.status === "DELIVERING" || (agv.status === "MOVING" && agv.currentTask)) {
+    return "#ea580c"; // Orange when performing task
+  }
+  return "#0284c7"; // Always Blue by default / idle
+}
+
 // ---- Dashed Route Visualization ---- //
 function drawRoutes(ctx, agvs) {
   if (!agvs) return;
@@ -249,9 +266,10 @@ function drawRoutes(ctx, agvs) {
     const remaining = agv.route.slice(agv.routeIndex);
     if (remaining.length < 2) continue;
 
-    ctx.strokeStyle = agv.color || "#0284c7";
+    const color = getAGVColor(agv);
+    ctx.strokeStyle = color;
     ctx.lineWidth = 2.5;
-    ctx.globalAlpha = 0.65;
+    ctx.globalAlpha = 0.75;
     ctx.setLineDash([5, 4]);
 
     ctx.beginPath();
@@ -265,9 +283,9 @@ function drawRoutes(ctx, agvs) {
 
     // Destination target dot
     const target = remaining[remaining.length - 1];
-    ctx.fillStyle = agv.color || "#0284c7";
+    ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(target.x * CELL + CELL / 2, target.y * CELL + CELL / 2, 4, 0, Math.PI * 2);
+    ctx.arc(target.x * CELL + CELL / 2, target.y * CELL + CELL / 2, 4.5, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -280,9 +298,10 @@ function drawAGVs(ctx, agvs) {
     const cx = agv.position.x * CELL + CELL / 2;
     const cy = agv.position.y * CELL + CELL / 2;
     const radius = CELL * 0.44;
-    const color = agv.color || "#0284c7";
-    const isCharging = agv.status === "CHARGING";
+    const color = getAGVColor(agv);
+    const isCharging = agv.status === "CHARGING" || (agv.location && agv.location.toLowerCase().includes("charging") && !agv.currentTask);
     const isFault = agv.status === "FAILED";
+    const isPerformingTask = (agv.currentTask || agv.status === "DELIVERING" || (agv.status === "MOVING" && agv.currentTask));
 
     // Shadow
     ctx.fillStyle = "rgba(0,0,0,0.12)";
@@ -290,14 +309,27 @@ function drawAGVs(ctx, agvs) {
     ctx.arc(cx, cy + 2, radius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Outer Ring
+    // Outer aura ring when performing task or charging
+    if (isPerformingTask) {
+      ctx.fillStyle = "rgba(234, 88, 12, 0.25)";
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius + 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (isCharging) {
+      ctx.fillStyle = "rgba(22, 163, 74, 0.25)";
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius + 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Outer White Ring
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Body
-    ctx.fillStyle = isFault ? "#dc2626" : color;
+    // Body (Blue for idle, Orange for performing task, Green for charging, Red for fault)
+    ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(cx, cy, radius - 2, 0, Math.PI * 2);
     ctx.fill();
@@ -314,16 +346,22 @@ function drawAGVs(ctx, agvs) {
     ctx.textAlign = "center";
     ctx.fillText(agv.id, cx, cy - radius - 3);
 
-    // Status / Battery indicator
+    // Center icon
     if (isCharging) {
-      ctx.fillStyle = "#15803d";
+      ctx.fillStyle = "#ffffff";
       ctx.font = "bold 8px sans-serif";
       ctx.fillText("⚡", cx, cy + 3);
+    } else if (isPerformingTask) {
+      // Small cargo box dot
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     // Inspection ring if selected
     if (window.inspectedEntity && window.inspectedEntity.type === "agv" && window.inspectedEntity.id === agv.id) {
-      ctx.strokeStyle = "#e06b3a";
+      ctx.strokeStyle = color;
       ctx.lineWidth = 2.5;
       ctx.setLineDash([3, 2]);
       ctx.beginPath();
@@ -357,7 +395,7 @@ function renderOpenTasks(tbody, tasks) {
         <td style="color:var(--t2)">${shortRoute}</td>
         <td><span class="priority-tag ${pc}">${priLabel}</span></td>
         <td style="font-family:'JetBrains Mono', monospace;font-weight:600;text-align:center;">${t.bidsCount || 3}</td>
-        <td><span class="btn-auction-tag">↻ Auction</span></td>
+        <td><span class="btn-auction-tag" onclick="assignTaskDirect('${t.id}')" title="Assign to AGV immediately" style="cursor:pointer;">↻ Auction</span></td>
         <td><button class="tab-pill" style="padding:2px 8px;font-size:9.5px;" onclick="selectTask('${t.id}')">View</button></td>
       </tr>
     `;
@@ -441,27 +479,39 @@ function renderFleetTable(tbody, agvs) {
   if (!tbody || !agvs) return;
 
   tbody.innerHTML = agvs.map(a => {
+    const col = getAGVColor(a);
+    const isCharging = a.status === "CHARGING" || (a.location && a.location.toLowerCase().includes("charging") && !a.currentTask);
+    const isPerformingTask = (a.currentTask || a.status === "DELIVERING" || (a.status === "MOVING" && a.currentTask));
+    
     const sc =
       a.status === "FAILED" ? "#dc2626" :
-      a.status === "CHARGING" ? "#d97706" :
-      a.status === "MOVING" ? "#16a34a" : "#71717a";
+      isCharging ? "#16a34a" :
+      isPerformingTask ? "#ea580c" : "#0284c7";
+
+    const statusLabel =
+      a.status === "FAILED" ? "Fault" :
+      isCharging ? "Charging" :
+      a.status === "DELIVERING" ? "Delivering" :
+      isPerformingTask ? "Task Transit" :
+      a.status === "MOVING" ? "Moving" : "Idle";
 
     const batColor = a.battery > 50 ? "#16a34a" : a.battery > 25 ? "#d97706" : "#dc2626";
-    const dotColor = a.color || "#0284c7";
 
     return `
       <tr>
         <td class="agv-id-cell">
-          <span style="width:7px;height:7px;border-radius:50%;background:${dotColor};display:inline-block;"></span>
-          ${a.id}
+          <span style="width:8px;height:8px;border-radius:50%;background:${col};box-shadow:0 0 5px ${col}88;display:inline-block;"></span>
+          <span style="font-weight:700;">${a.id}</span>
         </td>
         <td>
-          <span style="display:inline-flex;align-items:center;gap:4px;color:${sc};font-weight:600;">
-            <span style="width:5px;height:5px;border-radius:50%;background:${sc};display:inline-block;"></span>
-            ${a.status.charAt(0) + a.status.slice(1).toLowerCase()}
+          <span style="display:inline-flex;align-items:center;gap:5px;color:${sc};font-weight:600;">
+            <span style="width:6px;height:6px;border-radius:50%;background:${sc};display:inline-block;"></span>
+            ${statusLabel}
           </span>
         </td>
-        <td style="font-family:'JetBrains Mono', monospace;color:var(--t2)">${a.currentTask || "—"}</td>
+        <td style="font-family:'JetBrains Mono', monospace;font-weight:${isPerformingTask ? '700' : 'normal'};color:${isPerformingTask ? '#ea580c' : 'var(--t2)'}">
+          ${a.currentTask || "—"}
+        </td>
         <td style="color:var(--t2)">${a.location || "Floor"}</td>
         <td>
           <div class="battery-bar-container">

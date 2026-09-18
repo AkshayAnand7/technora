@@ -179,54 +179,20 @@ async def ws_factory(websocket: WebSocket):
 
             elif cmd_lower in ("assign_now", "assign"):
                 if sim.emergency_stop_active:
-                    await websocket.send_json({"type": "ERROR", "success": False, "error": "Emergency Stop is active. Cannot assign tasks."})
+                    await websocket.send_json({"type": "ERROR", "success": False, "error": "Emergency Stop is active. Reset E-Stop first."})
                     continue
 
                 tid = msg.get("taskId")
-                target_task = None
-                if tid:
-                    target_task = next((t for t in sim.tasks if t.id == tid), None)
-                if not target_task:
-                    target_task = next((t for t in sim.tasks if t.status in (TaskStatus.PENDING, TaskStatus.AUCTIONING)), None)
-                if not target_task and sim.tasks:
-                    target_task = sim.tasks[0]
-
-                if not target_task:
-                    await websocket.send_json({"type": "ERROR", "success": False, "error": "No available task to assign."})
-                    continue
-
-                if target_task.status in (TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS, TaskStatus.DELIVERING, TaskStatus.COMPLETED):
-                    await websocket.send_json({"type": "ERROR", "success": False, "error": f"Task {target_task.id} is already {target_task.status.value}."})
-                    continue
-
-                agv_id = msg.get("agvId")
-                if agv_id:
-                    target_agv = next((a for a in sim.agvs if a.id == agv_id), None)
-                    if not target_agv:
-                        await websocket.send_json({"type": "ERROR", "success": False, "error": f"AGV {agv_id} not found."})
-                        continue
-                    if target_agv.status == AGVStatus.FAILED:
-                        await websocket.send_json({"type": "ERROR", "success": False, "error": f"AGV {agv_id} is failed and cannot take tasks."})
-                        continue
-                    if target_agv.status == AGVStatus.CHARGING:
-                        await websocket.send_json({"type": "ERROR", "success": False, "error": f"AGV {agv_id} is charging and cannot take tasks."})
-                        continue
-                    if target_agv.status in (AGVStatus.MOVING, AGVStatus.DELIVERING):
-                        await websocket.send_json({"type": "ERROR", "success": False, "error": f"AGV {agv_id} is already busy."})
-                        continue
-                    assigned = sim.assign_task(target_task, agv_id)
-                    if not assigned:
-                        await websocket.send_json({"type": "ERROR", "success": False, "error": f"Could not route AGV {agv_id} to task {target_task.id}."})
-                        continue
-                else:
-                    avail = [a for a in sim.agvs if a.status in (AGVStatus.IDLE, AGVStatus.WAITING)]
-                    if avail:
-                        sim.assign_task(target_task, avail[0].id)
-                    else:
-                        sim.run_auction_for(target_task)
-
+                success, agv_id, assigned_tid = sim.assign_selected_task(tid)
                 await broadcast_state()
-                await websocket.send_json({"type": "SUCCESS", "success": True, "command": "assign", "taskId": target_task.id})
+                await websocket.send_json({
+                    "type": "SUCCESS",
+                    "success": True,
+                    "command": "assign_now",
+                    "agvId": agv_id,
+                    "taskId": assigned_tid,
+                    "message": f"Task {assigned_tid} assigned to {agv_id}"
+                })
 
             elif cmd_lower in ("fail_agv", "fail"):
                 sim.fail_agv(msg.get("agvId"))

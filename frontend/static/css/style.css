@@ -598,7 +598,7 @@ body {
 }
 
 .legend-dot.agv { background: #0284c7; }
-.legend-dot.target { background: #e06b3a; }
+.legend-dot.target { background: #ea580c; }
 .legend-dot.charging { background: #16a34a; border-radius: 2px; }
 .legend-dot.blocked { background: #dc2626; border-radius: 2px; }
 

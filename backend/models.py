@@ -139,6 +139,23 @@ class AGV:
     speed: float = 1.2
     location: str = "Floor"
 
+    @property
+    def dynamic_color(self) -> str:
+        """
+        Dynamically determine AGV visual indicator color:
+        - Blue (#0284c7): Default base color / Idle
+        - Orange (#ea580c): Whenever performing a task (assigned, en route, delivering)
+        - Green (#16a34a): When charging or routing to charge
+        - Red (#dc2626): When failed / fault
+        """
+        if self.status == AGVStatus.FAILED:
+            return "#dc2626"
+        if self.status == AGVStatus.CHARGING or (self.location and "charging" in self.location.lower() and not self.current_task):
+            return "#16a34a"
+        if self.current_task or self.status in (AGVStatus.MOVING, AGVStatus.DELIVERING):
+            return "#ea580c"
+        return "#0284c7"
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -153,7 +170,7 @@ class AGV:
             "idleTime": round(self.idle_time, 1),
             "tasksCompleted": self.tasks_completed,
             "totalDistance": round(self.total_distance, 1),
-            "color": self.color,
+            "color": self.dynamic_color,
             "speed": round(self.speed, 1),
             "location": self.location,
         }
