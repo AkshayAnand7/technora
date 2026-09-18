@@ -449,6 +449,132 @@ body {
   flex-direction: column;
 }
 
+/* Simulation Controls Bar */
+.sim-controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sim-state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+}
+
+.sim-state-pill .sim-state-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.sim-state-pill.running {
+  color: #16a34a;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.sim-state-pill.running .sim-state-dot {
+  background: #16a34a;
+  box-shadow: 0 0 5px rgba(22, 163, 74, 0.6);
+}
+
+.sim-state-pill.stopped {
+  color: #d97706;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.sim-state-pill.stopped .sim-state-dot {
+  background: #d97706;
+}
+
+.sim-state-pill.estop {
+  color: #dc2626;
+  background: #fef2f2;
+  border-color: #fecaca;
+  animation: pulseEstop 1.5s infinite;
+}
+
+.sim-state-pill.estop .sim-state-dot {
+  background: #dc2626;
+}
+
+@keyframes pulseEstop {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.sim-speed-pill {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--t1);
+  background: var(--panel-subtle);
+  border: 1px solid var(--border);
+  padding: 3px 7px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.sim-btn-pill {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 3px 9px;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--t1);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.sim-btn-pill:hover {
+  background: var(--panel-subtle);
+  border-color: var(--border-focus);
+}
+
+.sim-btn-pill.btn-running {
+  background: #fff7ed;
+  border-color: #fdba74;
+  color: #c2410c;
+}
+
+.sim-btn-pill.btn-stopped {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #15803d;
+}
+
+.demo-scenario-select {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--t1);
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+  outline: none;
+}
+
+.demo-scenario-select:hover {
+  border-color: var(--border-focus);
+}
+
 .legend-bar {
   display: flex;
   align-items: center;

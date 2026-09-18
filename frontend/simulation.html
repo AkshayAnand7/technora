@@ -229,16 +229,35 @@
         </div>
 
         <div class="sim-controls-bar">
+          <!-- State Indicator: RUNNING / STOPPED -->
+          <div class="sim-state-pill running" id="sim-state-pill" title="Simulation current status">
+            <span class="sim-state-dot"></span>
+            <span id="sim-state-text">RUNNING</span>
+          </div>
+
+          <!-- Speed Indicator -->
+          <div class="sim-speed-pill" id="sim-speed-pill" title="Current simulation speed">
+            <span id="sim-speed-text">1.0x</span>
+          </div>
+
+          <!-- Run / Stop Toggle Button -->
+          <button class="sim-btn-pill btn-running" id="btn-run-stop-sim" title="Run / Stop simulation">⏹ Stop</button>
+
+          <!-- Slow Down Step-by-Step Button -->
+          <button class="sim-btn-pill" id="btn-slowdown-sim" title="Slow down simulation step-by-step">🐢 Slow Down</button>
+
+          <!-- Demo Scenarios Dropdown -->
           <select class="demo-scenario-select" id="demo-scenario-select" onchange="runDemoScenario(this.value); this.value='';" title="Select demo scenario">
-            <option value="">⚡ Demo Scenarios…</option>
+            <option value="">⚡ Scenarios…</option>
             <option value="machine_vibration">1. Machine-03 Vibration</option>
             <option value="agv_failure">2. AGV Failure & Re-auction</option>
             <option value="blocked_corridor">3. Blocked Route & A* Reroute</option>
             <option value="material_shortage">4. Material Shortage</option>
             <option value="urgent_order">5. Urgent Production Order</option>
           </select>
-          <button class="sim-btn-pill" id="btn-pause-sim">⏸ Pause</button>
-          <button class="sim-btn-pill" id="btn-reset-sim">↻ Reset</button>
+
+          <!-- Reset Button -->
+          <button class="sim-btn-pill" id="btn-reset-sim" title="Reset factory simulation">↻ Reset</button>
         </div>
 
         <div class="legend-bar">

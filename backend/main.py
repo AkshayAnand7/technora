@@ -240,7 +240,7 @@ async def ws_factory(websocket: WebSocket):
                 sim.force_charge(msg.get("agvId"))
                 await broadcast_state()
 
-            elif cmd_lower in ("estop", "emergency_stop", "stop"):
+            elif cmd_lower in ("estop", "emergency_stop"):
                 sim.emergency_stop()
                 await broadcast_state()
                 await websocket.send_json({"type": "SUCCESS", "success": True, "emergencyStopActive": True})
@@ -250,20 +250,46 @@ async def ws_factory(websocket: WebSocket):
                 await broadcast_state()
                 await websocket.send_json({"type": "SUCCESS", "success": True, "emergencyStopActive": False})
 
-            elif cmd_lower == "start":
+            elif cmd_lower in ("start", "run"):
                 if sim.emergency_stop_active:
-                    await websocket.send_json({"type": "ERROR", "success": False, "error": "Emergency Stop is active. Issue 'resume' to resume operations."})
+                    await websocket.send_json({"type": "ERROR", "success": False, "error": "Emergency Stop is active. Clear Emergency Stop first."})
                     continue
                 sim.running = True
                 sim.paused = False
                 await broadcast_state()
+                await websocket.send_json({"type": "SUCCESS", "success": True, "running": True})
 
-            elif cmd_lower == "pause":
+            elif cmd_lower in ("stop", "pause"):
                 if sim.emergency_stop_active:
-                    await websocket.send_json({"type": "ERROR", "success": False, "error": "Emergency Stop is active. Cannot toggle pause."})
+                    await websocket.send_json({"type": "ERROR", "success": False, "error": "Emergency Stop is active."})
                     continue
-                sim.paused = not sim.paused
+                sim.paused = True
                 await broadcast_state()
+                await websocket.send_json({"type": "SUCCESS", "success": True, "running": False})
+
+            elif cmd_lower in ("toggle_run_stop", "run_stop"):
+                if sim.emergency_stop_active:
+                    await websocket.send_json({"type": "ERROR", "success": False, "error": "Emergency Stop is active. Clear Emergency Stop first."})
+                    continue
+                if sim.paused or not sim.running:
+                    sim.running = True
+                    sim.paused = False
+                else:
+                    sim.paused = True
+                await broadcast_state()
+                await websocket.send_json({"type": "SUCCESS", "success": True, "running": sim.running and not sim.paused})
+
+            elif cmd_lower in ("slow_down", "slowdown"):
+                speeds = [2.0, 1.5, 1.25, 1.0, 0.75, 0.5, 0.25]
+                current = round(sim.speed, 2)
+                lower = [s for s in speeds if s < current - 0.05]
+                if lower:
+                    sim.speed = lower[0]
+                else:
+                    sim.speed = 2.0
+                sim._push_event("SYSTEM", f"Simulation speed adjusted to {sim.speed}x", category="system")
+                await broadcast_state()
+                await websocket.send_json({"type": "SUCCESS", "success": True, "speed": sim.speed})
 
             elif cmd_lower == "reset":
                 saved_task_ids.clear()

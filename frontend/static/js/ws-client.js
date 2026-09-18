@@ -246,18 +246,55 @@ function onStateUpdate(s) {
     otc.textContent = s.openTasks.length;
   }
 
-  // Pause button text
+  // State indicator & speed pill & Run/Stop button
+  const statePill = document.getElementById("sim-state-pill");
+  const stateText = document.getElementById("sim-state-text");
+  const speedText = document.getElementById("sim-speed-text");
+  const runStopBtn = document.getElementById("btn-run-stop-sim");
   const pauseBtn = document.getElementById("btn-pause-sim");
-  if (pauseBtn) {
-    pauseBtn.textContent = (s.emergencyStopActive || s.paused) ? "▶ Resume" : "⏸ Pause";
+
+  if (speedText && s.speed !== undefined) {
+    const spd = Number(s.speed);
+    speedText.textContent = `${Number.isInteger(spd) ? spd.toFixed(1) : spd}x`;
   }
 
-  // Emergency Stop button style
+  if (s.emergencyStopActive) {
+    if (statePill) statePill.className = "sim-state-pill estop";
+    if (stateText) stateText.textContent = "EMERGENCY STOP";
+    if (runStopBtn) {
+      runStopBtn.textContent = "⏸ Locked";
+      runStopBtn.className = "sim-btn-pill btn-stopped";
+      runStopBtn.title = "Emergency Stop is active. Clear E-Stop first.";
+    }
+  } else if (s.paused || !s.running) {
+    if (statePill) statePill.className = "sim-state-pill stopped";
+    if (stateText) stateText.textContent = "STOPPED";
+    if (runStopBtn) {
+      runStopBtn.textContent = "▶ Run";
+      runStopBtn.className = "sim-btn-pill btn-stopped";
+      runStopBtn.title = "Simulation is stopped. Click to Run.";
+    }
+  } else {
+    if (statePill) statePill.className = "sim-state-pill running";
+    if (stateText) stateText.textContent = "RUNNING";
+    if (runStopBtn) {
+      runStopBtn.textContent = "⏹ Stop";
+      runStopBtn.className = "sim-btn-pill btn-running";
+      runStopBtn.title = "Simulation is running. Click to Stop.";
+    }
+  }
+
+  // Backwards compatibility for any legacy pause button
+  if (pauseBtn) {
+    pauseBtn.textContent = (s.emergencyStopActive || s.paused || !s.running) ? "▶ Resume" : "⏸ Pause";
+  }
+
+  // Emergency Stop button style (dedicated safety action)
   const estopBtn = document.getElementById("btn-estop-main");
   if (estopBtn) {
     if (s.emergencyStopActive) {
       estopBtn.style.background = "#991b1b";
-      estopBtn.textContent = "⚠ E-STOP ACTIVE (RESUME)";
+      estopBtn.textContent = "⚠ E-STOP ACTIVE (RESET)";
     } else {
       estopBtn.style.background = "#dc2626";
       estopBtn.textContent = "🚨 Emergency Stop (All)";
@@ -272,20 +309,39 @@ function setupControls() {
     if (el) el.addEventListener("click", fn);
   };
 
-  // Emergency Stop (All)
+  // Emergency Stop (All) — Dedicated safety interlock action
   on("btn-estop-main", () => {
-    if (state && (state.emergencyStopActive || state.paused)) {
+    if (state && state.emergencyStopActive) {
       send({ command: "resume" });
     } else {
       send({ command: "estop" });
     }
   });
 
-  // Pause / Resume simulation button
+  // Run / Stop simulation button (toggles running/stopped)
+  on("btn-run-stop-sim", () => {
+    if (state && state.emergencyStopActive) {
+      alert("Emergency Stop is active. Reset the safety Emergency Stop button first.");
+      return;
+    }
+    const isStopped = !state || state.paused || !state.running;
+    if (isStopped) {
+      send({ command: "start" });
+    } else {
+      send({ command: "stop" });
+    }
+  });
+
+  // Slow Down simulation step-by-step
+  on("btn-slowdown-sim", () => {
+    send({ command: "slow_down" });
+  });
+
+  // Pause / Resume simulation button (legacy fallback)
   on("btn-pause-sim", () => {
     if (state && state.emergencyStopActive) {
       send({ command: "resume" });
-    } else if (state && state.paused) {
+    } else if (state && (state.paused || !state.running)) {
       send({ command: "start" });
     } else {
       send({ command: "pause" });

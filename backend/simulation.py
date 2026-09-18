@@ -832,14 +832,17 @@ class Simulation:
         return auction
 
     def assign_task(self, task: Task, agv_id: str) -> bool:
-        if self.emergency_stop_active:
+        if self.emergency_stop_active or not self.running or self.paused:
             return False
         if not task or task.status in (TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS, TaskStatus.DELIVERING, TaskStatus.COMPLETED, TaskStatus.FAILED):
             return False
         agv = next((a for a in self.agvs if a.id == agv_id), None)
         if not agv:
             return False
-        if agv.status in (AGVStatus.FAILED, AGVStatus.CHARGING, AGVStatus.MOVING, AGVStatus.DELIVERING):
+        if agv.status in (AGVStatus.FAILED, AGVStatus.CHARGING):
+            return False
+        # If AGV already has an active task with remaining route, reject
+        if agv.current_task and agv.route:
             return False
         pr = find_path(self.grid, agv.position, task.source_position)
         if pr.found:
@@ -1023,10 +1026,6 @@ class Simulation:
                     self._on_arrival(agv)
             elif agv.status == AGVStatus.IDLE:
                 agv.idle_time += 0.1
-                # If idle but has battery, grab a task
-                if agv.battery > 25.0:
-                    new_t = self.create_task()
-                    self.assign_task(new_t, agv.id)
 
     def _on_arrival(self, agv: AGV):
         task = next((t for t in self.tasks if t.id == agv.current_task), None)
@@ -1080,10 +1079,12 @@ class Simulation:
             self._push_event(task.id, f"Delivered to {task.destination}",
                              f"Completed by {agv.id}", category="production", agv_id=agv.id, task_id=task.id)
 
+            agv.status = AGVStatus.IDLE
             agv.current_task = None
             agv.destination = None
             agv.route = []
             agv.route_index = 0
+            agv.speed = 0.0
             agv.tasks_completed += 1
             agv.utilization = min(100.0, agv.utilization + 2.5)
 
@@ -1195,6 +1196,7 @@ class Simulation:
             "running": self.running,
             "paused": self.paused,
             "emergencyStopActive": self.emergency_stop_active,
+            "simState": "EMERGENCY STOP" if self.emergency_stop_active else ("STOPPED" if (self.paused or not self.running) else "RUNNING"),
             "tickCount": self.tick_count,
         }
 
