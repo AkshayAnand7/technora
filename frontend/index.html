@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="SmartFactory — AI-Powered Factory Orchestration & AGV Dispatch System."/>
+  <title>SmartFactory — AI-Powered Factory Orchestration</title>
+  <link rel="icon" href="/static/favicon.svg"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/css/style.css"/>
+  <style>
+    .landing-wrap {
+      max-width: 960px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    .landing-hero {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .hero-tag {
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .hero-title {
+      font-size: 38px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      color: var(--t1);
+      margin-bottom: 12px;
+    }
+    .hero-desc {
+      font-size: 15px;
+      color: var(--t2);
+      max-width: 640px;
+      margin: 0 auto 24px;
+    }
+    .launch-action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent);
+      color: #ffffff;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 14px;
+      text-decoration: none;
+      box-shadow: 0 4px 14px rgba(224, 107, 58, 0.3);
+      transition: all 0.15s ease;
+    }
+    .launch-action-btn:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 36px 0;
+    }
+    .compare-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+    }
+    .compare-card.old {
+      border-top: 4px solid var(--t3);
+    }
+    .compare-card.new {
+      border-top: 4px solid var(--accent);
+      background: #fffcf9;
+    }
+    .compare-card h3 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .compare-card blockquote {
+      font-size: 14px;
+      font-style: italic;
+      color: var(--t2);
+      margin-bottom: 12px;
+    }
+
+    /* System architecture cards matching user image */
+    .arch-container {
+      margin: 48px 0;
+    }
+    .arch-tag {
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+    .arch-title {
+      color: var(--t1);
+      font-size: 26px;
+      font-weight: 800;
+      margin: 6px 0 20px 0;
+      letter-spacing: -0.5px;
+    }
+    .arch-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .arch-card {
+      display: flex;
+      align-items: center;
+      background: #232733;
+      border-radius: 8px;
+      padding: 14px 22px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    .arch-label {
+      width: 140px;
+      flex-shrink: 0;
+      color: #f59e0b;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .arch-desc {
+      color: #d1d5db;
+      font-size: 13.5px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-left">
+    <a href="/" class="brand">
+      <div class="brand-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M4 19V9l6 3V9l6 3V7l4 2v10H4zm2-2h12v-6.5l-4-2V11l-6-3v2.5l-2-1V17z"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1>SmartFactory</h1>
+        <p>AI-Powered Factory Orchestration</p>
+      </div>
+    </a>
+  </div>
+
+  <div class="header-right">
+    <nav class="nav-tabs">
+      <a href="/" class="nav-tab active">Overview</a>
+      <a href="/simulation" class="nav-tab">Live Simulation</a>
+      <a href="/analytics" class="nav-tab">Analytics</a>
+    </nav>
+  </div>
+</header>
+
+<main class="landing-wrap">
+
+  <div class="landing-hero">
+    <div class="hero-tag">Next-Generation AGV Orchestration</div>
+    <h1 class="hero-title">SmartFactory</h1>
+    <p class="hero-desc">
+      A decentralized auction-based dispatch and digital twin system for smart factories.
+      Predicts future congestion bottlenecks and downstream disruptions before assigning vehicles.
+    </p>
+    <a href="/simulation" class="launch-action-btn">
+      <span>▶</span> Launch Live Simulation
+    </a>
+  </div>
+
+  <!-- Comparison -->
+  <div class="compare-grid">
+    <div class="compare-card old">
+      <h3 style="color:var(--t2)">Traditional Dispatch</h3>
+      <blockquote>"Which AGV is closest right now?"</blockquote>
+      <p style="color:var(--t3);font-size:12px;line-height:1.5;">
+        Optimizes single-task proximity greedily. Funnels multiple vehicles into the same narrow corridors, triggering severe traffic delays downstream.
+      </p>
+    </div>
+
+    <div class="compare-card new">
+      <h3 style="color:var(--accent)">SmartFactory MarketFloor</h3>
+      <blockquote>"Which AGV causes the least future impact?"</blockquote>
+      <p style="color:var(--t2);font-size:12px;line-height:1.5;">
+        Multi-attribute market auction evaluating travel, real-time corridor congestion, future downstream impact heuristic, battery levels, and workload fairness.
+      </p>
+    </div>
+  </div>
+
+  <!-- System Architecture -->
+  <div class="arch-container">
+    <div class="arch-tag">HOW IT'S BUILT</div>
+    <h2 class="arch-title">System architecture</h2>
+
+    <div class="arch-cards">
+      <div class="arch-card">
+        <span class="arch-label">Frontend</span>
+        <span class="arch-desc">HTML5 Canvas & Vanilla JS — live factory dashboard, real-time controls & telemetry</span>
+      </div>
+
+      <div class="arch-card">
+        <span class="arch-label">Backend</span>
+        <span class="arch-desc">Python / FastAPI — WebSocket state streaming, REST APIs, asyncio tick loop</span>
+      </div>
+
+      <div class="arch-card">
+        <span class="arch-label">AI Layer</span>
+        <span class="arch-desc">Market-Based Auction Engine — multi-attribute bidding & future-impact congestion heuristic</span>
+      </div>
+
+      <div class="arch-card">
+        <span class="arch-label">Database</span>
+        <span class="arch-desc">SQLite Database — task history, auction bids, completion times & throughput analytics</span>
+      </div>
+
+      <div class="arch-card">
+        <span class="arch-label">Simulation</span>
+        <span class="arch-desc">Discrete-Event Tick Loop — A* congestion routing, battery cycles & failure recovery</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:center;margin:40px 0;">
+    <a href="/simulation" class="launch-action-btn">
+      <span>▶</span> Enter SmartFactory Simulation Room
+    </a>
+  </div>
+
+</main>
+
+</body>
+</html>

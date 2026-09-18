@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="SmartFactory — AI-Powered Factory Orchestration & AGV Dispatch Simulation"/>
+  <title>SmartFactory — AI-Powered Factory Orchestration</title>
+  <link rel="icon" href="/static/favicon.svg"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/css/style.css"/>
+</head>
+<body>
+
+<!-- ======== HEADER ======== -->
+<header class="header">
+  <div class="header-left">
+    <a href="/" class="brand">
+      <div class="brand-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M4 19V9l6 3V9l6 3V7l4 2v10H4zm2-2h12v-6.5l-4-2V11l-6-3v2.5l-2-1V17z"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1>SmartFactory</h1>
+        <p>AI-Powered Factory Orchestration</p>
+      </div>
+    </a>
+
+    <nav class="nav-tabs">
+      <a href="/simulation" class="nav-tab active">Live Simulation</a>
+      <a href="#task-manager" class="nav-tab" id="tab-task-manager">Task Manager</a>
+      <a href="/analytics" class="nav-tab">Analytics</a>
+      <a href="#reports" class="nav-tab" id="tab-reports">Reports</a>
+    </nav>
+  </div>
+
+  <div class="header-right">
+    <div class="tagline-meta">
+      <div class="live-time">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span id="clock-display">18 Sep 2026 14:28:17</span>
+      </div>
+      <div class="pipeline-tagline">Sense → Understand → Predict → Decide → Act → Update</div>
+    </div>
+
+    <div class="badge-online" id="conn-status">System Online</div>
+
+    <div class="btn-icon-badge" title="Notifications">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="counter">3</span>
+    </div>
+
+    <div class="user-avatar" title="Plant Supervisor">M</div>
+  </div>
+</header>
+
+<!-- ======== MAIN DASHBOARD CONTENT ======== -->
+<main class="dashboard-grid">
+
+  <!-- ==================== LEFT COLUMN ==================== -->
+  <div class="col-left">
+
+    <!-- CONTROLS PANEL -->
+    <div class="card controls-card">
+      <div class="card-head">
+        <div class="card-title-group">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <div>
+            <h2 class="card-title">Controls</h2>
+            <div class="card-subtitle">Inject events and manage factory operations</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="injector-list">
+        <!-- 01. Machine -->
+        <div class="injector-card" id="card-inj-machine">
+          <div class="inj-card-header" onclick="toggleExpand('card-inj-machine')" title="Click to trigger and view machine control actions">
+            <div class="inj-icon inj-machine">⚙</div>
+            <div class="inj-content">
+              <div class="inj-title"><span>01. Machine</span> <span class="inj-chevron">›</span></div>
+              <div class="inj-sub">Breakdown | Temperature | Vibration</div>
+            </div>
+          </div>
+          <div class="inj-actions-drawer">
+            <button class="action-sub-btn" onclick="triggerAction('machine', 'breakdown')">Breakdown</button>
+            <button class="action-sub-btn" onclick="triggerAction('machine', 'high_temp')">High Temp</button>
+            <button class="action-sub-btn" onclick="triggerAction('machine', 'vibration')">Vibration</button>
+            <button class="action-sub-btn" onclick="triggerAction('machine', 'speed_drop')">Speed Drop</button>
+            <button class="action-sub-btn" onclick="triggerAction('machine', 'maintenance')">Maintenance</button>
+          </div>
+        </div>
+
+        <!-- 02. Material -->
+        <div class="injector-card" id="card-inj-material">
+          <div class="inj-card-header" onclick="toggleExpand('card-inj-material')" title="Click to trigger and view material control actions">
+            <div class="inj-icon inj-material">📦</div>
+            <div class="inj-content">
+              <div class="inj-title"><span>02. Material</span> <span class="inj-chevron">›</span></div>
+              <div class="inj-sub">Low stock | Wrong material | Delay</div>
+            </div>
+          </div>
+          <div class="inj-actions-drawer">
+            <button class="action-sub-btn" onclick="triggerAction('material', 'low_stock')">Low Stock</button>
+            <button class="action-sub-btn" onclick="triggerAction('material', 'shortage')">Shortage</button>
+            <button class="action-sub-btn" onclick="triggerAction('material', 'wrong_material')">Wrong Material</button>
+            <button class="action-sub-btn" onclick="triggerAction('material', 'delivery_delay')">Delivery Delay</button>
+            <button class="action-sub-btn" onclick="triggerAction('material', 'warehouse_full')">Warehouse Full</button>
+          </div>
+        </div>
+
+        <!-- 03. AMR / AGV -->
+        <div class="injector-card" id="card-inj-amr">
+          <div class="inj-card-header" onclick="toggleExpand('card-inj-amr')" title="Click to trigger and view AMR / AGV actions">
+            <div class="inj-icon inj-amr">🚗</div>
+            <div class="inj-content">
+              <div class="inj-title"><span>03. AMR / AGV</span> <span class="inj-chevron">›</span></div>
+              <div class="inj-sub">Low battery | Blocked route | Congestion</div>
+            </div>
+          </div>
+          <div class="inj-actions-drawer">
+            <button class="action-sub-btn" onclick="triggerAction('amr', 'low_battery')">Low Battery</button>
+            <button class="action-sub-btn" onclick="triggerAction('amr', 'failure')">AGV Failure</button>
+            <button class="action-sub-btn" onclick="triggerAction('amr', 'stuck')">AGV Stuck</button>
+            <button class="action-sub-btn" onclick="triggerAction('amr', 'congestion')">Congestion</button>
+            <button class="action-sub-btn" onclick="triggerAction('amr', 'blocked_route')">Blocked Route</button>
+          </div>
+        </div>
+
+        <!-- 04. Production -->
+        <div class="injector-card" id="card-inj-production">
+          <div class="inj-card-header" onclick="toggleExpand('card-inj-production')" title="Click to trigger and view production actions">
+            <div class="inj-icon inj-production">📊</div>
+            <div class="inj-content">
+              <div class="inj-title"><span>04. Production</span> <span class="inj-chevron">›</span></div>
+              <div class="inj-sub">Bottleneck | Urgent order | Defect</div>
+            </div>
+          </div>
+          <div class="inj-actions-drawer">
+            <button class="action-sub-btn" onclick="triggerAction('production', 'bottleneck')">Bottleneck</button>
+            <button class="action-sub-btn" onclick="triggerAction('production', 'delay')">Delay</button>
+            <button class="action-sub-btn" onclick="triggerAction('production', 'urgent_order')">Urgent Order</button>
+            <button class="action-sub-btn" onclick="triggerAction('production', 'defect')">Quality Defect</button>
+            <button class="action-sub-btn" onclick="triggerAction('production', 'demand_change')">Demand Change</button>
+          </div>
+        </div>
+
+        <!-- 05. Factory -->
+        <div class="injector-card" id="card-inj-factory">
+          <div class="inj-card-header" onclick="toggleExpand('card-inj-factory')" title="Click to trigger and view factory actions">
+            <div class="inj-icon inj-factory">🏭</div>
+            <div class="inj-content">
+              <div class="inj-title"><span>05. Factory</span> <span class="inj-chevron">›</span></div>
+              <div class="inj-sub">Power | Network | Environment</div>
+            </div>
+          </div>
+          <div class="inj-actions-drawer">
+            <button class="action-sub-btn" onclick="triggerAction('factory', 'power')">Power Issue</button>
+            <button class="action-sub-btn" onclick="triggerAction('factory', 'network')">Network Issue</button>
+            <button class="action-sub-btn" onclick="triggerAction('factory', 'emergency')">Emergency</button>
+            <button class="action-sub-btn" onclick="triggerAction('factory', 'environment')">Environment</button>
+            <button class="action-sub-btn" onclick="triggerAction('factory', 'security')">Security</button>
+          </div>
+        </div>
+
+        <!-- 06. Human -->
+        <div class="injector-card" id="card-inj-human">
+          <div class="inj-card-header" onclick="toggleExpand('card-inj-human')" title="Click to trigger and view human actions">
+            <div class="inj-icon inj-human">👤</div>
+            <div class="inj-content">
+              <div class="inj-title"><span>06. Human</span> <span class="inj-chevron">›</span></div>
+              <div class="inj-sub">Worker unavailable | Safety issue</div>
+            </div>
+          </div>
+          <div class="inj-actions-drawer">
+            <button class="action-sub-btn" onclick="triggerAction('human', 'worker_unavailable')">Worker Unavailable</button>
+            <button class="action-sub-btn" onclick="triggerAction('human', 'error')">Task Error</button>
+            <button class="action-sub-btn" onclick="triggerAction('human', 'safety')">Safety Violation</button>
+            <button class="action-sub-btn" onclick="triggerAction('human', 'manual_intervention')">Manual Override</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Emergency Stop Button directly after 06. Human -->
+      <button class="btn-estop" id="btn-estop-main">
+        <span><b style="font-size:13px">!</b> &nbsp; Emergency Stop (All)</span>
+        <span>›</span>
+      </button>
+    </div>
+
+    <!-- EVENT STREAM (Directly below Controls, taking up remaining vertical space) -->
+    <div class="card event-card">
+      <div class="card-head" style="margin-bottom:6px;">
+        <div style="font-size:10.5px;font-weight:700;color:var(--accent);letter-spacing:0.5px;text-transform:uppercase;">
+          | Event Stream
+        </div>
+        <select id="event-filter-select" onchange="filterEvents(this.value)" style="border:none;background:transparent;font-size:10px;color:var(--t2);font-weight:600;cursor:pointer;">
+          <option value="all">All Events</option>
+          <option value="machine">Machine</option>
+          <option value="material">Material</option>
+          <option value="agv">AMR / AGV</option>
+          <option value="production">Production</option>
+          <option value="factory">Factory</option>
+          <option value="human">Human</option>
+        </select>
+      </div>
+
+      <div class="event-stream-list" id="event-list">
+        <!-- Live event rows injected here incrementally -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==================== CENTER COLUMN ==================== -->
+  <div class="col-center">
+
+    <!-- FACTORY FLOOR CANVAS -->
+    <div class="card factory-card">
+      <div class="card-head">
+        <div class="card-title-group">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+          <div>
+            <h2 class="card-title">Factory Floor - Live Simulation</h2>
+            <div class="card-subtitle">Real-time view of machines, materials, AGVs and production flow</div>
+          </div>
+        </div>
+
+        <div class="sim-controls-bar">
+          <select class="demo-scenario-select" id="demo-scenario-select" onchange="runDemoScenario(this.value); this.value='';" title="Select demo scenario">
+            <option value="">⚡ Demo Scenarios…</option>
+            <option value="machine_vibration">1. Machine-03 Vibration</option>
+            <option value="agv_failure">2. AGV Failure & Re-auction</option>
+            <option value="blocked_corridor">3. Blocked Route & A* Reroute</option>
+            <option value="material_shortage">4. Material Shortage</option>
+            <option value="urgent_order">5. Urgent Production Order</option>
+          </select>
+          <button class="sim-btn-pill" id="btn-pause-sim">⏸ Pause</button>
+          <button class="sim-btn-pill" id="btn-reset-sim">↻ Reset</button>
+        </div>
+
+        <div class="legend-bar">
+          <div class="legend-item"><span class="legend-dot agv"></span> AGV</div>
+          <div class="legend-item"><span class="legend-dot target"></span> Task Target</div>
+          <div class="legend-item"><span class="legend-dot charging"></span> Charging</div>
+          <div class="legend-item"><span class="legend-dot blocked"></span> Blocked Area</div>
+          <button id="btn-fullscreen-toggle" class="btn-icon-badge" style="width:24px;height:24px;border:none;" title="Expand view">⛶</button>
+        </div>
+      </div>
+
+      <div class="canvas-container">
+        <canvas id="factory-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- AGV / AMR FLEET -->
+    <div class="card fleet-card">
+      <div class="card-head" style="margin-bottom:6px;">
+        <div class="card-title-group">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/><path d="M5 11l2-6h10l2 6"/></svg>
+          <div>
+            <h2 class="card-title" style="font-size:11.5px">AGV / AMR Fleet</h2>
+            <div class="card-subtitle">Fleet status and key metrics</div>
+          </div>
+        </div>
+        <select style="border:none;background:transparent;font-size:10px;color:var(--t2);font-weight:600;cursor:pointer;">
+          <option>All AGVs</option>
+          <option>Active</option>
+          <option>Charging</option>
+        </select>
+      </div>
+
+      <!-- Fleet summary chips -->
+      <div class="fleet-summary-bar">
+        <div class="fleet-stat-chip"><span class="f-icon">🚗</span><div><div class="f-val" id="fs-total">7</div><div class="f-lbl">Total AGVs</div></div></div>
+        <div class="fleet-stat-chip" style="background:#f0fdf4"><span class="f-icon">🟢</span><div><div class="f-val" style="color:#16a34a" id="fs-active">5</div><div class="f-lbl">Active</div></div></div>
+        <div class="fleet-stat-chip"><span class="f-icon">⚪</span><div><div class="f-val" id="fs-idle">1</div><div class="f-lbl">Idle</div></div></div>
+        <div class="fleet-stat-chip" style="background:#fffbeb"><span class="f-icon">⚡</span><div><div class="f-val" style="color:#d97706" id="fs-charging">1</div><div class="f-lbl">Charging</div></div></div>
+        <div class="fleet-stat-chip" style="background:#fef2f2"><span class="f-icon">❗</span><div><div class="f-val" style="color:#dc2626" id="fs-fault">0</div><div class="f-lbl">Fault</div></div></div>
+      </div>
+
+      <!-- Fleet Table -->
+      <div class="fleet-table-wrap">
+        <table class="fleet-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Status</th>
+              <th>Current Task</th>
+              <th>Location</th>
+              <th>Battery</th>
+              <th>Speed</th>
+            </tr>
+          </thead>
+          <tbody id="fleet-table-body">
+            <!-- Populated dynamically via WebSocket -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==================== RIGHT COLUMN ==================== -->
+  <div class="col-right">
+
+    <!-- AGV'S LIVE AUCTION -->
+    <div class="card auction-card">
+      <div class="card-head">
+        <div class="card-title-group">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m14 12 6 6-6-6Z"/><path d="M21 3 3 21"/><path d="m15 7 2 2"/></svg>
+          <div>
+            <h2 class="card-title">AGV's Live Auction</h2>
+            <div class="card-subtitle">Real-time task bidding and assignment</div>
+          </div>
+        </div>
+        <span style="font-size:11px;color:var(--t3);cursor:pointer;">⛶</span>
+      </div>
+
+      <!-- Filter tabs -->
+      <div class="tab-pills">
+        <button class="tab-pill active" id="tab-open-tasks">Open Tasks <span class="badge-num" id="open-task-count">4</span></button>
+        <button class="tab-pill" id="tab-bidding">Bidding</button>
+        <button class="tab-pill" id="tab-completed">Completed</button>
+      </div>
+
+      <!-- Open tasks table / Bidding table container -->
+      <div class="task-table-wrap">
+        <table class="task-table" id="table-open-tasks">
+          <thead>
+            <tr>
+              <th>Task ID</th>
+              <th>From → To</th>
+              <th>Priority</th>
+              <th>Bids</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="open-tasks-body">
+            <!-- Populated dynamically via WebSocket / render -->
+          </tbody>
+        </table>
+
+        <!-- Multi-attribute Bidding Table -->
+        <div id="bidding-table-container" style="display:none;">
+          <table class="bidding-table">
+            <thead>
+              <tr>
+                <th>AGV</th>
+                <th>Travel</th>
+                <th>Battery</th>
+                <th>Congestion</th>
+                <th>Future Imp.</th>
+                <th>Final Bid</th>
+              </tr>
+            </thead>
+            <tbody id="bidding-table-body">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+          <div class="formula-callout">
+            Final Bid = Travel + Battery Risk + Congestion + Future Impact − Fairness
+          </div>
+        </div>
+      </div>
+
+      <!-- Selected task details -->
+      <div class="selected-task-box" id="selected-task-container">
+        <div class="st-header">
+          <div style="font-size:10px;font-weight:700;color:var(--accent);letter-spacing:0.5px;text-transform:uppercase;">
+            | Selected Task Details
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="st-id-tag" id="st-id">TASK-108</span>
+            <span class="priority-tag high" id="st-priority">High Priority</span>
+          </div>
+          <div class="st-countdown" id="st-countdown">00:18 <span style="font-size:9px;color:var(--t3);font-weight:500;">Auction ends in</span></div>
+        </div>
+
+        <div class="st-body">
+          <div class="st-meta">
+            <div class="st-meta-row"><span class="st-label">Pickup Location</span><span class="st-val" id="st-pickup">Storage S2</span></div>
+            <div class="st-meta-row"><span class="st-label">Drop Location</span><span class="st-val" id="st-drop">Packaging P1</span></div>
+            <div class="st-meta-row"><span class="st-label">Material Type</span><span class="st-val" id="st-mat">Component Box</span></div>
+            <div class="st-meta-row"><span class="st-label">Weight</span><span class="st-val" id="st-weight">15 kg</span></div>
+            <div class="st-meta-row"><span class="st-label">Required By</span><span class="st-val" id="st-required">14:45 (16 min)</span></div>
+          </div>
+
+          <!-- 3D Cardboard box illustration -->
+          <div class="box-illustration">
+            <svg width="60" height="60" viewBox="0 0 80 80" fill="none">
+              <path d="M40 8 L72 25 L40 42 L8 25 Z" fill="#d9a566" stroke="#b07d3b" stroke-width="1.5"/>
+              <path d="M8 25 L40 42 L40 74 L8 57 Z" fill="#c48d4e" stroke="#b07d3b" stroke-width="1.5"/>
+              <path d="M40 42 L72 25 L72 57 L40 74 Z" fill="#ad7637" stroke="#b07d3b" stroke-width="1.5"/>
+              <path d="M40 8 L40 42" stroke="#b07d3b" stroke-width="1.5" stroke-dasharray="2 2"/>
+              <path d="M33 12 L47 20" stroke="#8b5e28" stroke-width="3"/>
+            </svg>
+          </div>
+        </div>
+
+        <button class="btn-assign-now" id="btn-assign-now">
+          <span>↗</span> Assign Now
+        </button>
+      </div>
+
+      <!-- Autonomous Decision Trace Component -->
+      <div class="decision-trace-box" id="decision-trace-box">
+        <div class="dt-head">
+          <span class="dt-title">| Autonomous Decision Trace</span>
+          <span class="dt-loop-badge" id="dt-loop-badge">CLOSED LOOP</span>
+        </div>
+        <div class="dt-stepper" id="dt-stepper">
+          <div class="dt-step active" data-step="0"><span class="dt-dot"></span><span class="dt-label">SENSE</span></div>
+          <div class="dt-step" data-step="1"><span class="dt-dot"></span><span class="dt-label">UNDERSTAND</span></div>
+          <div class="dt-step" data-step="2"><span class="dt-dot"></span><span class="dt-label">PREDICT</span></div>
+          <div class="dt-step" data-step="3"><span class="dt-dot"></span><span class="dt-label">DECIDE</span></div>
+          <div class="dt-step" data-step="4"><span class="dt-dot"></span><span class="dt-label">ACT</span></div>
+          <div class="dt-step" data-step="5"><span class="dt-dot"></span><span class="dt-label">UPDATE</span></div>
+        </div>
+        <div class="dt-details" id="dt-details">
+          <div class="dt-stage-title" id="dt-stage-title">UPDATE: Digital Twin Synchronized</div>
+          <div class="dt-stage-desc" id="dt-stage-desc">Continuous telemetry active. Closed-loop factory orchestration operational.</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- SYSTEM STATUS & KEY METRICS (Directly below Live Auction, completing the right column snugly!) -->
+    <div class="card status-metrics-card">
+      <!-- Top: System Status -->
+      <div>
+        <div class="card-head" style="margin-bottom:4px;">
+          <div class="card-title-group">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            <div>
+              <h2 class="card-title" style="font-size:11.5px">System Status</h2>
+              <div class="card-subtitle">All factory systems operational</div>
+            </div>
+          </div>
+          <span id="system-health-badge" style="font-size:10px;font-weight:700;color:#16a34a;background:#f0fdf4;border:1px solid #bbf7d0;padding:2px 7px;border-radius:12px;">● Healthy</span>
+        </div>
+
+        <div class="status-grid">
+          <div class="status-box"><span class="sb-icon">⚙</span><span class="sb-name">Machines</span><span class="sb-state" id="ss-machines">8/8 Online</span></div>
+          <div class="status-box"><span class="sb-icon">📦</span><span class="sb-name">Materials</span><span class="sb-state" id="ss-materials">Normal</span></div>
+          <div class="status-box"><span class="sb-icon">📈</span><span class="sb-name">Production</span><span class="sb-state" id="ss-production">On Track</span></div>
+          <div class="status-box"><span class="sb-icon">🏭</span><span class="sb-name">Factory</span><span class="sb-state" id="ss-factory">Stable</span></div>
+          <div class="status-box"><span class="sb-icon">👤</span><span class="sb-name">Human</span><span class="sb-state" id="ss-human">3/4 Avail</span></div>
+        </div>
+      </div>
+
+      <!-- Bottom: Key Metrics -->
+      <div class="key-metrics-section">
+        <div class="card-head" style="margin-bottom:4px;">
+          <div class="card-title-group">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20v-6M6 20V10M18 20V4"/></svg>
+            <span class="card-title" style="font-size:10.5px">Key Metrics (Live)</span>
+          </div>
+          <span style="font-size:9.5px;color:var(--t3);cursor:pointer;">Last 1 Hour ▾</span>
+        </div>
+
+        <div class="km-grid">
+          <div class="km-box"><div class="km-val" style="color:var(--t1)">92%</div><div class="km-lbl">Line Utilization</div></div>
+          <div class="km-box"><div class="km-val" style="color:#e06b3a" id="km-orders">3</div><div class="km-lbl">Total Orders</div></div>
+          <div class="km-box"><div class="km-val" style="color:#16a34a">12 min</div><div class="km-lbl">Avg. Material Time</div></div>
+          <div class="km-box"><div class="km-val" style="color:#ea580c">96%</div><div class="km-lbl">On-Time Delivery</div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<script src="/static/js/render.js"></script>
+<script src="/static/js/ws-client.js"></script>
+</body>
+</html>

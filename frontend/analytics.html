@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="SmartFactory Analytics — Real-time and historical performance data."/>
+  <title>SmartFactory — Analytics & Performance</title>
+  <link rel="icon" href="/static/favicon.svg"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/static/css/style.css"/>
+  <style>
+    .analytics-container {
+      max-width: 1100px;
+      margin: 24px auto;
+      padding: 0 16px;
+    }
+    .analytics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin: 16px 0 24px;
+    }
+    .stat-box {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+    .stat-label {
+      font-size: 11px;
+      color: var(--t3);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .stat-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--t1);
+    }
+    .data-table-wrap {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 18px;
+      box-shadow: var(--shadow-sm);
+    }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11.5px;
+      margin-top: 12px;
+    }
+    .data-table th {
+      text-align: left;
+      color: var(--t3);
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+    .data-table td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--t1);
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-left">
+    <a href="/" class="brand">
+      <div class="brand-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M4 19V9l6 3V9l6 3V7l4 2v10H4zm2-2h12v-6.5l-4-2V11l-6-3v2.5l-2-1V17z"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1>SmartFactory</h1>
+        <p>AI-Powered Factory Orchestration</p>
+      </div>
+    </a>
+
+    <nav class="nav-tabs">
+      <a href="/" class="nav-tab">Overview</a>
+      <a href="/simulation" class="nav-tab">Live Simulation</a>
+      <a href="/analytics" class="nav-tab active">Analytics</a>
+    </nav>
+  </div>
+
+  <div class="header-right">
+    <div class="badge-online">System Online</div>
+  </div>
+</header>
+
+<main class="analytics-container">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;">
+    <div>
+      <h2 style="font-size:20px;font-weight:800;color:var(--t1)">Factory Analytics & Telemetry</h2>
+      <p style="font-size:12px;color:var(--t3);margin-top:2px;">Real-time database metrics computed from simulated task auctions and AMR deliveries</p>
+    </div>
+    <button class="nav-tab" onclick="loadAnalytics()" style="cursor:pointer;border:1px solid var(--border);">↻ Refresh Data</button>
+  </div>
+
+  <div class="analytics-grid">
+    <div class="stat-box">
+      <div class="stat-label">Total Completed Tasks</div>
+      <div class="stat-num" id="stat-total" style="color:var(--accent)">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Avg Completion Time</div>
+      <div class="stat-num" id="stat-avgtime" style="color:#16a34a">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Avg Travel Distance</div>
+      <div class="stat-num" id="stat-avgdist" style="color:#0284c7">—</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Dispatch Modes Executed</div>
+      <div id="stat-modes" style="font-size:12px;color:var(--t2);margin-top:6px;font-family:'JetBrains Mono',monospace;">—</div>
+    </div>
+  </div>
+
+  <div class="data-table-wrap">
+    <h3 style="font-size:14px;font-weight:700;color:var(--t1);">Recent Completed Transport Runs</h3>
+    <div style="overflow-x:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Task ID</th>
+            <th>Pickup</th>
+            <th>Delivery</th>
+            <th>Priority</th>
+            <th>Assigned AGV</th>
+            <th>Distance</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody id="recent-body">
+          <tr><td colspan="7" style="text-align:center;color:var(--t3);padding:18px;">Loading telemetry data…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script>
+async function loadAnalytics() {
+  try {
+    const res = await fetch("/api/analytics");
+    const data = await res.json();
+
+    document.getElementById("stat-total").textContent = data.totalCompleted || 0;
+    document.getElementById("stat-avgtime").textContent =
+      data.avgCompletionTime ? data.avgCompletionTime.toFixed(1) + "s" : "—";
+    document.getElementById("stat-avgdist").textContent =
+      data.avgDistance ? data.avgDistance.toFixed(0) + "m" : "—";
+
+    const modes = data.byMode || {};
+    const modeStr = Object.entries(modes)
+      .map(([k, v]) => `${k}: ${v.count} auctions`)
+      .join("<br>");
+    document.getElementById("stat-modes").innerHTML = modeStr || "—";
+
+    const tbody = document.getElementById("recent-body");
+    const tasks = data.recentTasks || [];
+    if (tasks.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--t3);padding:18px;">No completed tasks in database yet.</td></tr>';
+    } else {
+      tbody.innerHTML = tasks.map(t => `
+        <tr>
+          <td style="font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--accent)">${t.id}</td>
+          <td>${t.source}</td>
+          <td>${t.destination}</td>
+          <td><span class="priority-tag ${t.priority.toLowerCase()}">${t.priority}</span></td>
+          <td style="font-weight:600;">${t.assigned_agv || "—"}</td>
+          <td style="font-family:'JetBrains Mono',monospace;">${t.distance}m</td>
+          <td style="font-family:'JetBrains Mono',monospace;">${t.completion_time_s ? t.completion_time_s.toFixed(1) + "s" : "—"}</td>
+        </tr>
+      `).join("");
+    }
+  } catch (e) {
+    console.error("Failed to load analytics", e);
+  }
+}
+
+loadAnalytics();
+setInterval(loadAnalytics, 8000);
+</script>
+
+</body>
+</html>
