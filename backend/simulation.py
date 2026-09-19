@@ -772,7 +772,7 @@ class Simulation:
     # ---- Task creation & auction ---- #
 
     def create_task(self, source: str | None = None, dest: str | None = None,
-                    priority: str | None = None) -> Task:
+                    priority: str | None = None, material: str | None = None) -> Task:
         self._task_counter += 1
         tid = f"TASK-{self._task_counter}"
 
@@ -784,7 +784,7 @@ class Simulation:
         if not dst_st: dst_st = non_charging[1]
 
         pri = TaskPriority(priority) if priority and priority in TaskPriority.__members__ else random.choice(list(TaskPriority))
-        mat = random.choice(MATERIALS)
+        mat = material if (material and str(material).strip()) else random.choice(MATERIALS)
         dist = src_st.loading_zone.manhattan(dst_st.loading_zone)
 
         task = Task(
@@ -959,8 +959,9 @@ class Simulation:
 
         return True, chosen_agv.id, target_task.id
 
-    def spawn_task(self, source: str | None = None, dest: str | None = None, priority: str | None = None) -> Task:
-        task = self.create_task(source, dest, priority)
+    def spawn_task(self, source: str | None = None, dest: str | None = None,
+                   priority: str | None = None, material: str | None = None) -> Task:
+        task = self.create_task(source, dest, priority, material)
         auction = self.run_auction_for(task)
         if auction.winner_id:
             self.assign_task(task, auction.winner_id)
@@ -1230,6 +1231,21 @@ class Simulation:
 
     # ---- Full State Snapshot ---- #
 
+    def _enrich_agv_dict(self, agv) -> dict:
+        """Enrich AGV dict with task source/destination for frontend color logic."""
+        d = agv.to_dict()
+        d["taskSource"] = None
+        d["taskDest"] = None
+        if agv.current_task:
+            task = next((t for t in self.tasks if t.id == agv.current_task), None)
+            if task:
+                d["taskSource"] = task.source
+                d["taskDest"] = task.destination
+                # Override color to black for Quality Check tasks
+                if "quality" in task.source.lower() or "quality" in task.destination.lower():
+                    d["color"] = "#1a1a1a"
+        return d
+
     def snapshot(self) -> dict:
         grid_data: list[dict] = []
         for y in range(GRID_H):
@@ -1275,9 +1291,11 @@ class Simulation:
             "grid": grid_data,
             "gridW": GRID_W,
             "gridH": GRID_H,
-            "agvs": [a.to_dict() for a in self.agvs],
+            "agvs": [self._enrich_agv_dict(a) for a in self.agvs],
             "fleetSummary": fleet_summary,
             "tasks": [t.to_dict() for t in self.tasks[-20:]],
+            "completedTasks": [t.to_dict() for t in self.completed_tasks[-30:]],
+            "totalCompletedCount": len(self.completed_tasks),
             "openTasks": open_tasks[:5],
             "selectedTask": selected_task.to_dict() if selected_task else None,
             "currentAuction": self.current_auction.to_dict() if self.current_auction else None,

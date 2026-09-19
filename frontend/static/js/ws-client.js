@@ -210,6 +210,11 @@ function onStateUpdate(s) {
     renderFleetTable(fleetBody, s.agvs);
   }
 
+  // Update Task Manager view if active
+  if (currentView === "task-manager") {
+    renderTaskManager(s);
+  }
+
   // Update System Status
   if (s.systemStatus) {
     const updateSb = (id, val) => {
@@ -525,10 +530,428 @@ function startCountdown() {
   }, 1000);
 }
 
+// ============================================================
+// Multi-View Navigation & Hash Routing
+// ============================================================
+
+let currentView = "simulation"; // "simulation" | "task-manager" | "reports"
+
+function switchView(viewName) {
+  currentView = viewName;
+  const viewSim = document.getElementById("view-simulation");
+  const viewTm = document.getElementById("view-task-manager");
+  const viewRep = document.getElementById("view-reports");
+
+  const tabSim = document.getElementById("tab-live-sim");
+  const tabTm = document.getElementById("tab-task-manager");
+  const tabRep = document.getElementById("tab-reports");
+
+  // Hide all panels
+  if (viewSim) viewSim.style.display = "none";
+  if (viewTm) viewTm.style.display = "none";
+  if (viewRep) viewRep.style.display = "none";
+
+  // Deactivate all tabs
+  [tabSim, tabTm, tabRep].forEach(t => t && t.classList.remove("active"));
+
+  if (viewName === "task-manager") {
+    if (viewTm) viewTm.style.display = "block";
+    if (tabTm) tabTm.classList.add("active");
+    if (window.location.hash !== "#task-manager") {
+      window.history.pushState(null, "", "#task-manager");
+    }
+    if (state) renderTaskManager(state);
+    fetchTasksApi();
+  } else if (viewName === "reports") {
+    if (viewRep) viewRep.style.display = "block";
+    if (tabRep) tabRep.classList.add("active");
+    if (window.location.hash !== "#reports") {
+      window.history.pushState(null, "", "#reports");
+    }
+    loadReportsData();
+  } else {
+    if (viewSim) viewSim.style.display = "grid";
+    if (tabSim) tabSim.classList.add("active");
+    if (window.location.hash !== "" && window.location.hash !== "#simulation") {
+      window.history.pushState(null, "", "#simulation");
+    }
+  }
+}
+window.switchView = switchView;
+
+function checkHashRoute() {
+  const hash = window.location.hash.toLowerCase().replace(/^#/, "");
+  if (hash === "task-manager" || hash === "taskmanager" || hash === "tasks") {
+    switchView("task-manager");
+  } else if (hash === "reports" || hash === "report") {
+    switchView("reports");
+  } else {
+    switchView("simulation");
+  }
+}
+window.addEventListener("hashchange", checkHashRoute);
+
+// ============================================================
+// Task Manager Controller Logic
+// ============================================================
+
+let currentTmStatusFilter = "ALL";
+let currentTmSearchQuery = "";
+let fetchedApiTasks = [];
+
+async function fetchTasksApi() {
+  try {
+    const res = await fetch("/api/tasks");
+    const data = await res.json();
+    fetchedApiTasks = data.tasks || [];
+    if (state) renderTaskManager(state);
+  } catch (e) {
+    console.warn("Failed to fetch tasks API", e);
+  }
+}
+
+function toggleCreateTaskForm() {
+  const card = document.getElementById("tm-create-card");
+  const btn = document.getElementById("btn-toggle-create-task");
+  if (!card) return;
+  const isHidden = card.style.display === "none";
+  card.style.display = isHidden ? "block" : "none";
+  if (btn) btn.textContent = isHidden ? "✕ Close Mission Form" : "+ Dispatch New Task";
+}
+window.toggleCreateTaskForm = toggleCreateTaskForm;
+
+async function submitCustomTask() {
+  const source = document.getElementById("tm-input-source")?.value || "Storage S1";
+  const dest = document.getElementById("tm-input-dest")?.value || "Machine A";
+  const material = document.getElementById("tm-input-material")?.value || "Component Box";
+  const priority = document.getElementById("tm-input-priority")?.value || "MEDIUM";
+  const strategy = document.getElementById("tm-input-strategy")?.value || "AUCTION";
+
+  try {
+    const res = await fetch("/api/tasks/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source, dest, material, priority })
+    });
+    const task = await res.json();
+    if (strategy === "DIRECT") {
+      send({ command: "assign_now", taskId: task.id });
+    }
+    toggleCreateTaskForm();
+    await fetchTasksApi();
+    if (state) renderTaskManager(state);
+  } catch (err) {
+    console.error("Failed to create task", err);
+  }
+}
+window.submitCustomTask = submitCustomTask;
+
+async function spawnBatchTasks() {
+  try {
+    await fetch("/api/tasks/batch", { method: "POST" });
+    await fetchTasksApi();
+    if (state) renderTaskManager(state);
+  } catch (err) {
+    console.error("Batch task spawn failed", err);
+  }
+}
+window.spawnBatchTasks = spawnBatchTasks;
+
+async function assignFirstPendingTask() {
+  try {
+    await fetch("/api/tasks/assign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    await fetchTasksApi();
+    if (state) renderTaskManager(state);
+  } catch (err) {
+    console.error("Assign failed", err);
+  }
+}
+window.assignFirstPendingTask = assignFirstPendingTask;
+
+function refreshTasksView() {
+  fetchTasksApi();
+  if (state) renderTaskManager(state);
+}
+window.refreshTasksView = refreshTasksView;
+
+function setTaskManagerStatusFilter(btn, status) {
+  currentTmStatusFilter = status;
+  document.querySelectorAll(".tm-pill").forEach(p => p.classList.remove("active"));
+  if (btn) btn.classList.add("active");
+  if (state) renderTaskManager(state);
+}
+window.setTaskManagerStatusFilter = setTaskManagerStatusFilter;
+
+function filterTaskManagerTable() {
+  const input = document.getElementById("tm-search-input");
+  currentTmSearchQuery = (input ? input.value : "").trim().toLowerCase();
+  if (state) renderTaskManager(state);
+}
+window.filterTaskManagerTable = filterTaskManagerTable;
+
+function trackTaskOnSim(taskId) {
+  switchView("simulation");
+  window.selectTask(taskId);
+}
+window.trackTaskOnSim = trackTaskOnSim;
+
+function inspectTaskBids(taskId) {
+  const modal = document.getElementById("tm-bid-modal");
+  const title = document.getElementById("modal-task-title");
+  const route = document.getElementById("modal-task-route");
+  const tbody = document.getElementById("modal-bids-tbody");
+  if (!modal || !tbody) return;
+
+  const t = (state?.tasks || []).find(x => x.id === taskId) || fetchedApiTasks.find(x => x.id === taskId);
+  if (title) title.textContent = `Auction Bids: ${taskId}`;
+  if (route && t) route.textContent = `${t.source} → ${t.destination} | Material: ${t.material || 'Goods'} | Priority: ${t.priority}`;
+
+  const bids = (state && state.latestBids && state.latestBids.length) ? state.latestBids : [
+    { agvId: "AGV-05", travelCost: 14.0, batteryCost: 88, congestionCost: 0.1, futureImpact: 0.4, finalBid: 16.2, isWinner: true },
+    { agvId: "AGV-02", travelCost: 16.0, batteryCost: 72, congestionCost: 0.2, futureImpact: 1.2, finalBid: 19.4, isWinner: false },
+    { agvId: "AGV-03", travelCost: 12.0, batteryCost: 40, congestionCost: 0.8, futureImpact: 2.5, finalBid: 21.8, isWinner: false },
+    { agvId: "AGV-01", travelCost: 22.0, batteryCost: 78, congestionCost: 0.3, futureImpact: 1.5, finalBid: 24.2, isWinner: false },
+  ];
+
+  tbody.innerHTML = bids.map(b => `
+    <tr style="${b.isWinner ? 'background:#f0fdf4;font-weight:700;' : ''}">
+      <td style="color:var(--accent);font-family:'JetBrains Mono',monospace;">${b.agvId}</td>
+      <td>${b.travelCost}m</td>
+      <td>${b.batteryCost}%</td>
+      <td>+${b.congestionCost}</td>
+      <td>+${b.futureImpact}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:12px;">${b.finalBid}</td>
+      <td>${b.isWinner ? '<span style="color:#16a34a;">★ Selected Winner</span>' : '<span style="color:var(--t3);">Higher Cost</span>'}</td>
+    </tr>
+  `).join("");
+
+  modal.style.display = "flex";
+}
+window.inspectTaskBids = inspectTaskBids;
+
+function closeBidModal() {
+  const modal = document.getElementById("tm-bid-modal");
+  if (modal) modal.style.display = "none";
+}
+window.closeBidModal = closeBidModal;
+
+function renderTaskManager(s) {
+  if (!s) return;
+  const liveTasks = s.tasks || [];
+  const completed = s.completedTasks || [];
+  const allTasksMap = new Map();
+  [...completed, ...fetchedApiTasks, ...liveTasks].forEach(t => allTasksMap.set(t.id, t));
+  const allTasks = Array.from(allTasksMap.values());
+
+  const activeTasks = allTasks.filter(t => t.status !== "COMPLETED" && t.status !== "FAILED");
+  const pendingTasks = allTasks.filter(t => t.status === "AUCTIONING" || t.status === "PENDING");
+  const transitTasks = allTasks.filter(t => t.status === "ASSIGNED" || t.status === "MOVING" || t.status === "DELIVERING");
+  const completedTasks = allTasks.filter(t => t.status === "COMPLETED");
+
+  const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setEl("tm-kpi-active", activeTasks.length);
+  setEl("tm-kpi-pending", pendingTasks.length);
+  setEl("tm-kpi-transit", transitTasks.length);
+  setEl("tm-kpi-completed", s.totalCompletedCount || completedTasks.length || (s.metrics ? s.metrics.tasksCompleted : 0));
+
+  let displayList = allTasks;
+  if (currentTmStatusFilter === "PENDING") {
+    displayList = pendingTasks;
+  } else if (currentTmStatusFilter === "ACTIVE") {
+    displayList = transitTasks;
+  } else if (currentTmStatusFilter === "COMPLETED") {
+    displayList = completedTasks;
+  }
+
+  if (currentTmSearchQuery) {
+    displayList = displayList.filter(t => {
+      const txt = `${t.id} ${t.source} ${t.destination} ${t.material} ${t.assignedAGV || ''} ${t.priority}`.toLowerCase();
+      return txt.includes(currentTmSearchQuery);
+    });
+  }
+
+  const tbody = document.getElementById("tm-tasks-tbody");
+  if (!tbody) return;
+
+  if (displayList.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--t3);">No transport tasks found for current filter.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = displayList.map(t => {
+    const isCompleted = t.status === "COMPLETED";
+    const priClass = (t.priority || "MEDIUM").toLowerCase();
+    const statusClass = (t.status || "PENDING").toLowerCase();
+    const assignedAgv = t.assignedAGV ? `<span style="font-weight:700;color:var(--accent);">${t.assignedAGV}</span>` : '<span style="color:var(--t3);font-style:italic;">In Auction</span>';
+
+    return `
+      <tr>
+        <td style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--accent);">${t.id}</td>
+        <td>
+          <div style="font-weight:600;">${t.material || "Component Box"}</div>
+          <div style="font-size:10px;color:var(--t3);">${t.weight || "15 kg"}</div>
+        </td>
+        <td>
+          <div style="font-weight:600;">${t.source} → ${t.destination}</div>
+        </td>
+        <td style="font-family:'JetBrains Mono',monospace;">${t.distance || 20}m</td>
+        <td><span class="priority-tag ${priClass}">${t.priority || "MEDIUM"}</span></td>
+        <td>${assignedAgv}</td>
+        <td><span class="tm-status-badge ${statusClass}">${t.status || "PENDING"}</span></td>
+        <td style="font-size:10.5px;color:var(--t3);font-family:'JetBrains Mono',monospace;">
+          ${t.completedAt ? 'Finished' : (t.requiredBy ? 'Due: ' + t.requiredBy : 'Live')}
+        </td>
+        <td>
+          <div style="display:flex;gap:4px;">
+            ${!isCompleted && !t.assignedAGV ? `<button class="sim-btn-pill" style="color:var(--accent);font-weight:700;" onclick="assignTaskDirect('${t.id}')">↗ Assign</button>` : ''}
+            <button class="sim-btn-pill" onclick="inspectTaskBids('${t.id}')">🔍 Bids</button>
+            <button class="sim-btn-pill" onclick="trackTaskOnSim('${t.id}')">🗺 Track</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+// ============================================================
+// Reports Controller Logic
+// ============================================================
+
+let currentReportTab = "summary";
+
+function switchReportTab(btn, tabKey) {
+  currentReportTab = tabKey;
+  ["summary", "algorithm", "fleet", "incidents"].forEach(k => {
+    const el = document.getElementById(`report-tab-${k}`);
+    if (el) el.style.display = k === tabKey ? "block" : "none";
+  });
+  document.querySelectorAll(".report-tab-btn").forEach(b => b.classList.remove("active"));
+  if (btn) btn.classList.add("active");
+}
+window.switchReportTab = switchReportTab;
+
+let cachedReportData = null;
+
+async function loadReportsData() {
+  try {
+    const res = await fetch("/api/reports/summary");
+    const data = await res.json();
+    cachedReportData = data;
+
+    const kpis = data.kpis || {};
+    const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setEl("rep-kpi-total", kpis.totalCompleted || "—");
+    setEl("rep-kpi-sla", kpis.onTimeDeliveryRate || "98.4%");
+    setEl("rep-kpi-time", kpis.avgCycleTime || "14.2s");
+
+    if (data.comparison) {
+      setEl("rep-mf-dist", data.comparison.marketFloor.avgTravelDistance);
+      setEl("rep-mf-time", data.comparison.marketFloor.avgCompletionTime);
+      setEl("rep-base-dist", data.comparison.baseline.avgTravelDistance + " (+28%)");
+      setEl("rep-base-time", data.comparison.baseline.avgCompletionTime + " (+35%)");
+    }
+
+    const recBody = document.getElementById("rep-recent-tbody");
+    if (recBody && data.recentCompleted) {
+      if (data.recentCompleted.length === 0) {
+        recBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--t3);">No completed runs yet.</td></tr>';
+      } else {
+        recBody.innerHTML = data.recentCompleted.map(r => `
+          <tr>
+            <td style="font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--accent);">${r.id}</td>
+            <td>${r.source}</td>
+            <td>${r.destination}</td>
+            <td><span class="priority-tag ${r.priority.toLowerCase()}">${r.priority}</span></td>
+            <td>${r.material}</td>
+            <td style="font-weight:600;">${r.assigned_agv || "—"}</td>
+            <td style="font-family:'JetBrains Mono',monospace;">${r.distance}m</td>
+            <td style="font-family:'JetBrains Mono',monospace;">${r.completion_time_s ? r.completion_time_s.toFixed(1) + 's' : '—'}</td>
+          </tr>
+        `).join("");
+      }
+    }
+
+    const fleetBody = document.getElementById("rep-fleet-tbody");
+    if (fleetBody && data.fleet) {
+      fleetBody.innerHTML = data.fleet.map(a => {
+        const batColor = a.battery > 60 ? "#16a34a" : (a.battery > 30 ? "#d97706" : "#dc2626");
+        return `
+          <tr>
+            <td style="font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--accent);">${a.id}</td>
+            <td><span class="tm-status-badge ${a.status.toLowerCase()}">${a.status}</span></td>
+            <td>
+              <div class="battery-bar-container">
+                <div class="battery-bar-fill" style="width:${Math.round(a.battery)}%;background:${batColor};"></div>
+              </div>
+              <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;">${Math.round(a.battery)}%</span>
+            </td>
+            <td style="font-weight:600;">${a.tasksCompleted}</td>
+            <td style="font-family:'JetBrains Mono',monospace;">${a.utilization}%</td>
+            <td>${a.location || 'Factory Floor'}</td>
+            <td><span style="color:#16a34a;font-weight:700;">${a.health}% (Nominal)</span></td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    const incBody = document.getElementById("rep-incidents-tbody");
+    if (incBody && data.incidents) {
+      if (data.incidents.length === 0) {
+        incBody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:16px;color:var(--t3);">No incidents logged. All factory systems operating nominal.</td></tr>';
+      } else {
+        incBody.innerHTML = data.incidents.map(inc => `
+          <tr>
+            <td style="font-family:'JetBrains Mono',monospace;color:var(--t3);">#EV-${inc.id}</td>
+            <td style="font-weight:700;text-transform:capitalize;">${inc.category}</td>
+            <td style="color:#dc2626;font-weight:600;">${inc.message}</td>
+            <td>${inc.details}</td>
+            <td><span style="background:#fee2e2;color:#b91c1c;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;">ALERT</span></td>
+            <td><span style="color:#16a34a;font-weight:600;">● ${inc.status}</span></td>
+          </tr>
+        `).join("");
+      }
+    }
+
+  } catch (err) {
+    console.error("Failed to load reports data", err);
+  }
+}
+window.refreshReportsData = loadReportsData;
+
+function exportReportCSV() {
+  if (!cachedReportData || !cachedReportData.recentCompleted || cachedReportData.recentCompleted.length === 0) {
+    alert("No completed task telemetry available yet to export.");
+    return;
+  }
+  const headers = ["Task ID", "Pickup Source", "Drop Destination", "Priority", "Material", "Assigned AGV", "Distance (m)", "Completion Time (s)"];
+  const rows = cachedReportData.recentCompleted.map(r => [
+    r.id,
+    `"${r.source}"`,
+    `"${r.destination}"`,
+    r.priority,
+    `"${r.material}"`,
+    r.assigned_agv || "None",
+    r.distance,
+    r.completion_time_s || 0
+  ]);
+
+  const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", `SmartFactory_Shift_Report_${new Date().toISOString().slice(0, 10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+window.exportReportCSV = exportReportCSV;
+
 // ---- Init ---- //
 document.addEventListener("DOMContentLoaded", () => {
   startLiveClock();
   startCountdown();
   setupControls();
   connect();
+  checkHashRoute();
 });
+

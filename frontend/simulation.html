@@ -29,10 +29,10 @@
     </a>
 
     <nav class="nav-tabs">
-      <a href="/simulation" class="nav-tab active">Live Simulation</a>
-      <a href="#task-manager" class="nav-tab" id="tab-task-manager">Task Manager</a>
+      <a href="#simulation" class="nav-tab active" id="tab-live-sim" onclick="switchView('simulation'); return false;">Live Simulation</a>
+      <a href="#task-manager" class="nav-tab" id="tab-task-manager" onclick="switchView('task-manager'); return false;">Task Manager</a>
       <a href="/analytics" class="nav-tab">Analytics</a>
-      <a href="#reports" class="nav-tab" id="tab-reports">Reports</a>
+      <a href="#reports" class="nav-tab" id="tab-reports" onclick="switchView('reports'); return false;">Reports</a>
     </nav>
   </div>
 
@@ -57,7 +57,7 @@
 </header>
 
 <!-- ======== MAIN DASHBOARD CONTENT ======== -->
-<main class="dashboard-grid">
+<main class="dashboard-grid view-panel" id="view-simulation">
 
   <!-- ==================== LEFT COLUMN ==================== -->
   <div class="col-left">
@@ -496,6 +496,411 @@
   </div>
 
 </main>
+
+<!-- ============================================================
+     VIEW: TASK MANAGER
+     ============================================================ -->
+<section class="view-panel view-container-wide" id="view-task-manager" style="display:none;">
+  <!-- Header -->
+  <div class="view-header">
+    <div class="view-title-group">
+      <h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="m9 14 2 2 4-4"/></svg>
+        AGV Transport Task Manager
+      </h2>
+      <p>Decentralized dispatch queue, multi-attribute auction bids, and active AMR mission control</p>
+    </div>
+    <div class="view-actions-group">
+      <button class="btn-view-action primary" id="btn-toggle-create-task" onclick="toggleCreateTaskForm()">+ Dispatch New Task</button>
+      <button class="btn-view-action" onclick="spawnBatchTasks()">⚡ Spawn 3 Rush Tasks</button>
+      <button class="btn-view-action" onclick="assignFirstPendingTask()">↗ Assign Best AGV</button>
+      <button class="btn-view-action" onclick="refreshTasksView()">↻ Refresh</button>
+    </div>
+  </div>
+
+  <!-- KPI Strip -->
+  <div class="tm-kpi-grid">
+    <div class="tm-kpi-card">
+      <div class="tm-kpi-icon" style="color:var(--accent)">📋</div>
+      <div>
+        <div class="tm-kpi-label">Active Tasks</div>
+        <div class="tm-kpi-val" id="tm-kpi-active">—</div>
+      </div>
+    </div>
+    <div class="tm-kpi-card">
+      <div class="tm-kpi-icon" style="color:#d97706">⏳</div>
+      <div>
+        <div class="tm-kpi-label">In Auction / Pending</div>
+        <div class="tm-kpi-val" id="tm-kpi-pending" style="color:#d97706">—</div>
+      </div>
+    </div>
+    <div class="tm-kpi-card">
+      <div class="tm-kpi-icon" style="color:#0284c7">🚗</div>
+      <div>
+        <div class="tm-kpi-label">In Transit (AMRs)</div>
+        <div class="tm-kpi-val" id="tm-kpi-transit" style="color:#0284c7">—</div>
+      </div>
+    </div>
+    <div class="tm-kpi-card">
+      <div class="tm-kpi-icon" style="color:#16a34a">✓</div>
+      <div>
+        <div class="tm-kpi-label">Completed Today</div>
+        <div class="tm-kpi-val" id="tm-kpi-completed" style="color:#16a34a">—</div>
+      </div>
+    </div>
+    <div class="tm-kpi-card">
+      <div class="tm-kpi-icon" style="color:#9333ea">⚡</div>
+      <div>
+        <div class="tm-kpi-label">Avg Auction Latency</div>
+        <div class="tm-kpi-val" style="color:#9333ea">0.18s</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Task Drawer / Card (collapsible) -->
+  <div class="tm-form-card" id="tm-create-card" style="display:none;">
+    <div class="tm-form-title">
+      <span>⚡ New Material Transport Mission</span>
+    </div>
+    <div class="tm-form-grid">
+      <div class="tm-field-group">
+        <label>Pickup Location</label>
+        <select id="tm-input-source">
+          <option value="Storage S1">Storage S1</option>
+          <option value="Storage S2">Storage S2</option>
+          <option value="Raw Material">Raw Material</option>
+          <option value="Machine A">Machine A</option>
+          <option value="Machine B">Machine B</option>
+          <option value="Machine C">Machine C</option>
+          <option value="Quality Check Q1">Quality Check Q1</option>
+          <option value="Dispatch D1">Dispatch D1</option>
+        </select>
+      </div>
+
+      <div class="tm-field-group">
+        <label>Dropoff Destination</label>
+        <select id="tm-input-dest">
+          <option value="Machine A">Machine A</option>
+          <option value="Machine B">Machine B</option>
+          <option value="Machine C">Machine C</option>
+          <option value="Finished Goods">Finished Goods / Packaging</option>
+          <option value="Quality Check Q1">Quality Check Q1</option>
+          <option value="Dispatch D1">Dispatch D1</option>
+          <option value="Storage S2">Storage S2</option>
+        </select>
+      </div>
+
+      <div class="tm-field-group">
+        <label>Material Type</label>
+        <select id="tm-input-material">
+          <option value="Component Box">Component Box (15 kg)</option>
+          <option value="Raw Material">Raw Material Pallet (25 kg)</option>
+          <option value="Steel Plate">Steel Plate (28 kg)</option>
+          <option value="Circuit Board">Circuit Board Tray (8 kg)</option>
+          <option value="Assembly Part">Assembly Part (12 kg)</option>
+          <option value="Motor Unit">Motor Unit (19 kg)</option>
+          <option value="Inspected Unit">Inspected Unit (14 kg)</option>
+        </select>
+      </div>
+
+      <div class="tm-field-group">
+        <label>Priority</label>
+        <select id="tm-input-priority">
+          <option value="HIGH">HIGH Priority</option>
+          <option value="CRITICAL">CRITICAL Priority</option>
+          <option value="MEDIUM" selected>MEDIUM Priority</option>
+          <option value="LOW">LOW Priority</option>
+        </select>
+      </div>
+
+      <div class="tm-field-group">
+        <label>Dispatch Strategy</label>
+        <select id="tm-input-strategy">
+          <option value="AUCTION">MarketFloor Auction (Lowest Future Impact)</option>
+          <option value="DIRECT">Immediate Direct AGV Dispatch</option>
+        </select>
+      </div>
+
+      <div>
+        <button class="btn-view-action primary" style="width:100%;height:35px;justify-content:center;" onclick="submitCustomTask()">
+          <span>✓</span> Dispatch Mission
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter & Search Toolbar -->
+  <div class="tm-toolbar">
+    <div class="tm-search-box">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="tm-search-input" placeholder="Search tasks by ID, station, material, or AGV…" oninput="filterTaskManagerTable()"/>
+    </div>
+
+    <div class="tm-filter-pills">
+      <button class="tm-pill active" data-status="ALL" onclick="setTaskManagerStatusFilter(this, 'ALL')">All Tasks</button>
+      <button class="tm-pill" data-status="PENDING" onclick="setTaskManagerStatusFilter(this, 'PENDING')">Auctioning / Pending</button>
+      <button class="tm-pill" data-status="ACTIVE" onclick="setTaskManagerStatusFilter(this, 'ACTIVE')">In Transit</button>
+      <button class="tm-pill" data-status="COMPLETED" onclick="setTaskManagerStatusFilter(this, 'COMPLETED')">Completed</button>
+    </div>
+  </div>
+
+  <!-- Master Task Table -->
+  <div class="tm-table-card">
+    <table class="tm-master-table">
+      <thead>
+        <tr>
+          <th>Task ID</th>
+          <th>Material & Payload</th>
+          <th>Route (Pickup → Drop)</th>
+          <th>Distance</th>
+          <th>Priority</th>
+          <th>Assigned AGV</th>
+          <th>Status</th>
+          <th>Timing</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="tm-tasks-tbody">
+        <!-- Live rows injected here -->
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================
+     VIEW: REPORTS
+     ============================================================ -->
+<section class="view-panel view-container-wide" id="view-reports" style="display:none;">
+  <!-- Header -->
+  <div class="view-header">
+    <div class="view-title-group">
+      <h2>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        SmartFactory Telemetry & Operational Reports
+      </h2>
+      <p>Decentralized auction benchmarks, fleet health, congestion avoidance audits, and shift delivery performance</p>
+    </div>
+    <div class="view-actions-group">
+      <select id="report-shift-select" style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;font-size:11.5px;font-weight:600;color:var(--t1);" onchange="refreshReportsData()">
+        <option value="live">Current Live Shift (Shift A: 06:00 - 14:00)</option>
+        <option value="shift-b">Previous Shift (Shift B: 22:00 - 06:00)</option>
+        <option value="24h">24-Hour Production Cycle</option>
+      </select>
+      <button class="btn-view-action" onclick="exportReportCSV()">📥 Export CSV</button>
+      <button class="btn-view-action" onclick="window.print()">🖨️ Print / Save PDF</button>
+      <button class="btn-view-action" onclick="refreshReportsData()">↻ Refresh Data</button>
+    </div>
+  </div>
+
+  <!-- Reports Tab Strip -->
+  <div class="report-nav-strip">
+    <button class="report-tab-btn active" data-report="summary" onclick="switchReportTab(this, 'summary')">Executive Shift Summary</button>
+    <button class="report-tab-btn" data-report="algorithm" onclick="switchReportTab(this, 'algorithm')">Auction & Algorithm Benchmarks</button>
+    <button class="report-tab-btn" data-report="fleet" onclick="switchReportTab(this, 'fleet')">AGV Fleet Health & Telemetry</button>
+    <button class="report-tab-btn" data-report="incidents" onclick="switchReportTab(this, 'incidents')">Incident & Safety Audit Log</button>
+  </div>
+
+  <!-- Report Tab 1: Executive Shift Summary -->
+  <div id="report-tab-summary">
+    <div class="tm-kpi-grid" style="grid-template-columns: repeat(4, 1fr);">
+      <div class="tm-kpi-card">
+        <div class="tm-kpi-icon" style="color:var(--accent)">📦</div>
+        <div>
+          <div class="tm-kpi-label">Total Completed Runs</div>
+          <div class="tm-kpi-val" id="rep-kpi-total" style="color:var(--accent)">—</div>
+        </div>
+      </div>
+      <div class="tm-kpi-card">
+        <div class="tm-kpi-icon" style="color:#16a34a">🎯</div>
+        <div>
+          <div class="tm-kpi-label">On-Time Delivery SLA</div>
+          <div class="tm-kpi-val" id="rep-kpi-sla" style="color:#16a34a">98.4%</div>
+        </div>
+      </div>
+      <div class="tm-kpi-card">
+        <div class="tm-kpi-icon" style="color:#0284c7">⚡</div>
+        <div>
+          <div class="tm-kpi-label">Avg Delivery Cycle</div>
+          <div class="tm-kpi-val" id="rep-kpi-time" style="color:#0284c7">—</div>
+        </div>
+      </div>
+      <div class="tm-kpi-card">
+        <div class="tm-kpi-icon" style="color:#d97706">🔋</div>
+        <div>
+          <div class="tm-kpi-label">Fleet Energy Efficiency</div>
+          <div class="tm-kpi-val" style="color:#d97706">0.42 kWh/km</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Runs Ledger Table -->
+    <div class="report-card" style="margin-top:20px;">
+      <div class="report-card-title">
+        <span>Recent Transport Runs Ledger (SQLite Telemetry)</span>
+        <span style="font-size:11px;color:var(--t3);font-weight:500;">Persistent Audit Trail</span>
+      </div>
+      <table class="tm-master-table">
+        <thead>
+          <tr>
+            <th>Run ID</th>
+            <th>Pickup</th>
+            <th>Destination</th>
+            <th>Priority</th>
+            <th>Material</th>
+            <th>Assigned AGV</th>
+            <th>Travel Dist</th>
+            <th>Cycle Time</th>
+          </tr>
+        </thead>
+        <tbody id="rep-recent-tbody">
+          <tr><td colspan="8" style="text-align:center;padding:18px;color:var(--t3);">Loading telemetry…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Report Tab 2: Auction & Algorithm Benchmarks -->
+  <div id="report-tab-algorithm" style="display:none;">
+    <div class="report-grid-2col">
+      <div class="report-card">
+        <div class="report-card-title">
+          <span>MarketFloor Auction vs Nearest-Neighbor</span>
+          <span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#f0fdf4;color:#16a34a;font-weight:700;">+26.8% Superior</span>
+        </div>
+        <table class="algo-compare-table">
+          <thead>
+            <tr>
+              <th>Performance Metric</th>
+              <th>MarketFloor</th>
+              <th>Baseline</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Average Travel Distance</td>
+              <td class="algo-highlight" id="rep-mf-dist">26.4m</td>
+              <td class="algo-standard" id="rep-base-dist">33.8m (+28%)</td>
+            </tr>
+            <tr>
+              <td>Average Completion Time</td>
+              <td class="algo-highlight" id="rep-mf-time">14.2s</td>
+              <td class="algo-standard" id="rep-base-time">19.2s (+35%)</td>
+            </tr>
+            <tr>
+              <td>Congestion Avoidance Rate</td>
+              <td class="algo-highlight">94.2%</td>
+              <td class="algo-standard">66.8%</td>
+            </tr>
+            <tr>
+              <td>Bottleneck Incidents</td>
+              <td class="algo-highlight">1 occurrence</td>
+              <td class="algo-standard">6 occurrences</td>
+            </tr>
+            <tr>
+              <td>Fleet Wear Balance (Fairness)</td>
+              <td class="algo-highlight">0.91 (High)</td>
+              <td class="algo-standard">0.64 (Skewed)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="report-card">
+        <div class="report-card-title">
+          <span>Decentralized Multi-Attribute Formulation</span>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;background:#fcfbfa;border:1px solid var(--border);border-radius:6px;padding:14px;color:var(--t1);line-height:1.6;margin-bottom:12px;">
+          Final Bid = TravelCost + BatteryRisk + CongestionPenalty + FutureImpact − Fairness
+        </div>
+        <p style="font-size:12px;color:var(--t2);line-height:1.5;">
+          Unlike simplistic nearest-vehicle dispatch, MarketFloor evaluates future spatial interference.
+          If an AGV would occupy a narrow corridor when high-priority parts require clearance, its Future Impact score spikes, allowing an alternative AGV with slightly farther distance to take the load and prevent systemic plant deadlock.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Report Tab 3: AGV Fleet Health & Telemetry -->
+  <div id="report-tab-fleet" style="display:none;">
+    <div class="report-card">
+      <div class="report-card-title">
+        <span>Fleet Health & Battery Degradation Audit</span>
+        <span style="font-size:11px;color:var(--t3);font-weight:500;">7 Active AMRs Monitored</span>
+      </div>
+      <table class="tm-master-table">
+        <thead>
+          <tr>
+            <th>AGV ID</th>
+            <th>Status</th>
+            <th>Battery Telemetry</th>
+            <th>Tasks Finished</th>
+            <th>Utilization Rate</th>
+            <th>Location Zone</th>
+            <th>Fleet Health Score</th>
+          </tr>
+        </thead>
+        <tbody id="rep-fleet-tbody">
+          <!-- Populated dynamically -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Report Tab 4: Incident & Safety Audit Log -->
+  <div id="report-tab-incidents" style="display:none;">
+    <div class="report-card">
+      <div class="report-card-title">
+        <span>Factory Disruption & Safety Audit Log</span>
+        <span style="font-size:11px;color:var(--t3);font-weight:500;">Closed-Loop Autonomous Trace</span>
+      </div>
+      <table class="tm-master-table">
+        <thead>
+          <tr>
+            <th>Event ID</th>
+            <th>Domain</th>
+            <th>Anomaly Type</th>
+            <th>Technical Details</th>
+            <th>Severity</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="rep-incidents-tbody">
+          <!-- Populated dynamically -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Bidding Inspector Modal -->
+<div class="modal-overlay" id="tm-bid-modal" style="display:none;">
+  <div class="modal-window">
+    <div class="modal-header">
+      <h3 style="font-size:15px;font-weight:700;color:var(--t1);" id="modal-task-title">Auction Bids: TASK-108</h3>
+      <button class="modal-close-btn" onclick="closeBidModal()">✕</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--t3);margin-bottom:12px;" id="modal-task-route">Storage S2 → Packaging P1 | Material: Component Box</div>
+    <table class="tm-master-table" style="margin-bottom:14px;">
+      <thead>
+        <tr>
+          <th>AGV</th>
+          <th>Travel Cost</th>
+          <th>Battery Risk</th>
+          <th>Congestion</th>
+          <th>Future Impact</th>
+          <th>Final Bid</th>
+          <th>Outcome</th>
+        </tr>
+      </thead>
+      <tbody id="modal-bids-tbody">
+        <!-- Injected dynamically -->
+      </tbody>
+    </table>
+    <div class="formula-callout" style="margin-top:6px;">
+      Winner selected based on minimum composite bid with future-impact bottleneck avoidance.
+    </div>
+  </div>
+</div>
 
 <script src="/static/js/render.js"></script>
 <script src="/static/js/ws-client.js"></script>

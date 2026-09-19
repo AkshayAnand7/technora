@@ -144,15 +144,20 @@ class AGV:
         """
         Dynamically determine AGV visual indicator color:
         - Blue (#0284c7): Default base color / Idle
-        - Orange (#ea580c): Whenever performing a task (assigned, en route, delivering)
+        - Orange (#ea580c): Performing a task (assigned, en route)
+        - Grey (#6b7280): Delivering
         - Green (#16a34a): When charging or routing to charge
         - Red (#dc2626): When failed / fault
+        Note: Quality Check (Black #1a1a1a) is resolved at snapshot level
+        since AGV doesn't have direct task source info.
         """
         if self.status == AGVStatus.FAILED:
             return "#dc2626"
         if self.status == AGVStatus.CHARGING or (self.location and "charging" in self.location.lower() and not self.current_task):
             return "#16a34a"
-        if self.current_task or self.status in (AGVStatus.MOVING, AGVStatus.DELIVERING):
+        if self.status == AGVStatus.DELIVERING:
+            return "#6b7280"
+        if self.current_task or self.status == AGVStatus.MOVING:
             return "#ea580c"
         return "#0284c7"
 

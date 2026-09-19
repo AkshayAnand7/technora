@@ -241,20 +241,35 @@ function drawStations(ctx, state) {
 }
 
 // Dynamic AGV state color mapping:
-// Always in Blue by default/idle.
-// Whenever it performs task -> Orange.
-// If charging -> Green.
-// If failed -> Red.
+// Blue (#0284c7): Default / Idle
+// Orange (#ea580c): Performing task (assigned, en route)
+// Green (#16a34a): Charging
+// Black (#1a1a1a): Quality Check task
+// Grey (#6b7280): Delivering
+// Red (#dc2626): Failed / Fault
+function isQualityCheckTask(agv) {
+  if (!agv) return false;
+  const src = (agv.taskSource || "").toLowerCase();
+  const dst = (agv.taskDest || "").toLowerCase();
+  return src.includes("quality") || dst.includes("quality");
+}
+
 function getAGVColor(agv) {
   if (!agv) return "#0284c7";
   if (agv.status === "FAILED") return "#dc2626";
   if (agv.status === "CHARGING" || (agv.location && agv.location.toLowerCase().includes("charging") && !agv.currentTask)) {
     return "#16a34a"; // Green when charging
   }
-  if (agv.currentTask || agv.status === "DELIVERING" || (agv.status === "MOVING" && agv.currentTask)) {
+  if (agv.currentTask && isQualityCheckTask(agv)) {
+    return "#1a1a1a"; // Black when performing Quality Check
+  }
+  if (agv.status === "DELIVERING") {
+    return "#6b7280"; // Grey when delivering
+  }
+  if (agv.currentTask || (agv.status === "MOVING" && agv.currentTask)) {
     return "#ea580c"; // Orange when performing task
   }
-  return "#0284c7"; // Always Blue by default / idle
+  return "#0284c7"; // Blue by default / idle
 }
 
 // ---- Dashed Route Visualization ---- //
@@ -301,7 +316,9 @@ function drawAGVs(ctx, agvs) {
     const color = getAGVColor(agv);
     const isCharging = agv.status === "CHARGING" || (agv.location && agv.location.toLowerCase().includes("charging") && !agv.currentTask);
     const isFault = agv.status === "FAILED";
-    const isPerformingTask = (agv.currentTask || agv.status === "DELIVERING" || (agv.status === "MOVING" && agv.currentTask));
+    const isQC = agv.currentTask && isQualityCheckTask(agv);
+    const isDelivering = agv.status === "DELIVERING";
+    const isPerformingTask = !isQC && !isDelivering && (agv.currentTask || (agv.status === "MOVING" && agv.currentTask));
 
     // Shadow
     ctx.fillStyle = "rgba(0,0,0,0.12)";
@@ -309,8 +326,18 @@ function drawAGVs(ctx, agvs) {
     ctx.arc(cx, cy + 2, radius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Outer aura ring when performing task or charging
-    if (isPerformingTask) {
+    // Outer aura ring based on state
+    if (isQC) {
+      ctx.fillStyle = "rgba(26, 26, 26, 0.25)";
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius + 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (isDelivering) {
+      ctx.fillStyle = "rgba(107, 114, 128, 0.25)";
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius + 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (isPerformingTask) {
       ctx.fillStyle = "rgba(234, 88, 12, 0.25)";
       ctx.beginPath();
       ctx.arc(cx, cy, radius + 3.5, 0, Math.PI * 2);
@@ -481,21 +508,38 @@ function renderFleetTable(tbody, agvs) {
   tbody.innerHTML = agvs.map(a => {
     const col = getAGVColor(a);
     const isCharging = a.status === "CHARGING" || (a.location && a.location.toLowerCase().includes("charging") && !a.currentTask);
-    const isPerformingTask = (a.currentTask || a.status === "DELIVERING" || (a.status === "MOVING" && a.currentTask));
+    const isQC = a.currentTask && isQualityCheckTask(a);
+    const isDelivering = a.status === "DELIVERING";
+    const isPerformingTask = !isQC && !isDelivering && (a.currentTask || (a.status === "MOVING" && a.currentTask));
     
+    // Status dot/label color matches AGV state color
     const sc =
       a.status === "FAILED" ? "#dc2626" :
       isCharging ? "#16a34a" :
+      isQC ? "#1a1a1a" :
+      isDelivering ? "#6b7280" :
       isPerformingTask ? "#ea580c" : "#0284c7";
 
     const statusLabel =
       a.status === "FAILED" ? "Fault" :
       isCharging ? "Charging" :
-      a.status === "DELIVERING" ? "Delivering" :
+      isQC ? "Quality Check" :
+      isDelivering ? "Delivering" :
       isPerformingTask ? "Task Transit" :
       a.status === "MOVING" ? "Moving" : "Idle";
 
-    const batColor = a.battery > 50 ? "#16a34a" : a.battery > 25 ? "#d97706" : "#dc2626";
+    // Battery bar color based on operational state:
+    // Charging → Green, Delivering → Grey, Task → Orange, Quality Check → Black
+    const batColor =
+      isCharging ? "#16a34a" :
+      isQC ? "#1a1a1a" :
+      isDelivering ? "#6b7280" :
+      isPerformingTask ? "#ea580c" :
+      (a.battery > 50 ? "#16a34a" : a.battery > 25 ? "#d97706" : "#dc2626");
+
+    // Task cell color
+    const taskColor = isQC ? "#1a1a1a" : isDelivering ? "#6b7280" : isPerformingTask ? "#ea580c" : "var(--t2)";
+    const taskWeight = (isPerformingTask || isQC || isDelivering) ? '700' : 'normal';
 
     return `
       <tr>
@@ -509,7 +553,7 @@ function renderFleetTable(tbody, agvs) {
             ${statusLabel}
           </span>
         </td>
-        <td style="font-family:'JetBrains Mono', monospace;font-weight:${isPerformingTask ? '700' : 'normal'};color:${isPerformingTask ? '#ea580c' : 'var(--t2)'}">
+        <td style="font-family:'JetBrains Mono', monospace;font-weight:${taskWeight};color:${taskColor}">
           ${a.currentTask || "—"}
         </td>
         <td style="color:var(--t2)">${a.location || "Floor"}</td>
